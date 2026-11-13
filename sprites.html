@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BULLETZ · Teste de sprites</title>
+<style>
+  :root {
+    --bg: #14101c; --panel: #1f1830; --line: #3a2f52; --text: #ece4f6; --dim: #9a8db4;
+    --accent: #ffb347; --accent2: #ff4d6d; --stage: #2b2540;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; height: 100vh; display: grid; grid-template-columns: 250px 1fr; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 14px 10px; }
+  aside h1 { font-size: 15px; margin: 0 6px 4px; color: var(--accent); letter-spacing: .5px; }
+  aside p { margin: 0 6px 12px; color: var(--dim); font-size: 12px; }
+  aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 14px 6px 4px; }
+  .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+  .item:hover { background: #2a2140; }
+  .item.on { background: #33274f; border-color: var(--accent); }
+  .item canvas { width: 40px; height: 40px; image-rendering: pixelated; background: var(--stage); border-radius: 4px; flex: none; }
+  .item small { display: block; color: var(--dim); font-size: 11px; }
+  main { display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow-y: auto; padding: 16px 20px; gap: 14px; }
+  .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .top h2 { margin: 0; font-size: 20px; }
+  .top span { color: var(--dim); }
+  #stageWrap { background: var(--stage); border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; min-height: 340px; flex: 1 1 340px; overflow: auto; padding: 12px; }
+  #stage { image-rendering: pixelated; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .bar label { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 13px; }
+  .bar input[type=range] { width: 110px; accent-color: var(--accent); }
+  button.b { background: #2e2447; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  button.b:hover { border-color: var(--accent); }
+  button.b.on { background: var(--accent); color: #1a1226; border-color: var(--accent); font-weight: 600; }
+  select { background: #2e2447; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; }
+  .info { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 13px; }
+  .info b { color: var(--text); }
+  #strip { display: flex; flex-wrap: wrap; gap: 8px; }
+  .thumb { border: 2px solid var(--line); border-radius: 6px; background: var(--stage); padding: 4px; cursor: pointer; text-align: center; color: var(--dim); font-size: 11px; }
+  .thumb canvas { display: block; image-rendering: pixelated; margin: 0 auto 2px; }
+  .thumb:hover { border-color: #6b5a92; }
+  .thumb.on { border-color: var(--accent); color: var(--accent); }
+  .hint { color: var(--dim); font-size: 12px; }
+  kbd { background: #2e2447; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+  .back { margin-left: auto; color: var(--accent); text-decoration: none; font-size: 13px; }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; height: auto; } aside { max-height: 220px; } main { height: auto; } }
+</style>
+</head>
+<body>
+<aside>
+  <h1>BULLETZ · SPRITES</h1>
+  <p>Escolha um sprite e revise quadro a quadro.</p>
+  <div id="list"></div>
+</aside>
+<main>
+  <div class="top">
+    <h2 id="title"></h2>
+    <span id="meta"></span>
+    <a class="back" href="index.html">← voltar ao jogo</a>
+  </div>
+
+  <div id="stageWrap"><canvas id="stage"></canvas></div>
+
+  <div class="bar">
+    <button class="b" id="prev" title="Quadro anterior (←)">◀</button>
+    <button class="b" id="play" title="Reproduzir / pausar (Espaço)">▶ Play</button>
+    <button class="b" id="next" title="Próximo quadro (→)">▶</button>
+    <label>FPS <input type="range" id="fps" min="1" max="24" value="8"> <span id="fpsv">8</span></label>
+    <label>Zoom <input type="range" id="zoom" min="1" max="10" value="4"> <span id="zoomv">4x</span></label>
+    <label>Fundo
+      <select id="bg">
+        <option value="#2b2540">Roxo</option>
+        <option value="#000000">Preto</option>
+        <option value="#ffffff">Branco</option>
+        <option value="#00ff00">Verde (chroma)</option>
+        <option value="checker">Xadrez</option>
+        <option value="city">Cidade do jogo</option>
+      </select>
+    </label>
+    <button class="b" id="flip" title="Espelhar (F)">Espelhar</button>
+    <button class="b on" id="grid" title="Pixels (G)">Grade</button>
+    <button class="b on" id="pts" title="Pontos (P)">Âncora / cano</button>
+    <button class="b on" id="onion" title="Sombra do quadro anterior (O)">Onion skin</button>
+  </div>
+
+  <div class="info" id="info"></div>
+  <div id="strip"></div>
+  <div class="hint"><kbd>←</kbd> <kbd>→</kbd> quadro · <kbd>Espaço</kbd> play · <kbd>↑</kbd> <kbd>↓</kbd> trocar sprite · <kbd>F</kbd> espelhar · <kbd>G</kbd> grade · <kbd>P</kbd> pontos · <kbd>O</kbd> onion · clique num quadro da faixa para escolher</div>
+</main>
+
+<script>
+// Mesmas medidas do game.js. "anchor" é o pé do personagem; "muzzle" é a saída do tiro.
+const S = 96, K = 78 / 96   // personagem é desenhado a 78px a partir de células de 96px
+const playerAnchor = [48, 67 / K]
+const pm = (m) => m && [playerAnchor[0] + m[0] / K, playerAnchor[1] + m[1] / K]
+const runFireMuzzles = [[33,-50],[34,-50],[35,-50],[35,-50],[33,-50],[34,-50],[35,-50],[35,-50]].map(pm)
+
+const SPRITES = [
+  { group: 'Edu (jogador)' },
+  { id: 'idle',       name: 'Respiração (parado)', file: 'respiracao.png',            w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
+  { id: 'run',        name: 'Corrida',             file: 'corrida-colete-jeans.png',  w: S, h: S, cols: 4, count: 8, anchor: playerAnchor },
+  { id: 'runFire',    name: 'Corrida atirando',    file: 'corrida-atirando.png',      w: S, h: S, cols: 4, count: 8, anchor: playerAnchor, muzzles: runFireMuzzles },
+  { id: 'idleFire',   name: 'Parado atirando',     file: 'parado-atirando.png',       w: S, h: S, cols: 1, count: 1, anchor: playerAnchor, muzzles: [pm([24,-49])] },
+  { id: 'crouch',     name: 'Agachado',            file: 'agachamento-colete-jeans.png', w: S, h: S, cols: 3, count: 3, anchor: playerAnchor, muzzles: [null, null, pm([24,-26])] },
+  { id: 'playerFall', name: 'Queda',               file: 'edu-queda-sprites.png',     w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
+  { group: 'Inimigos' },
+  { id: 'patrol',     name: 'Patrulheiro Ex',      file: 'patrulheiro-ex-movimento-v2.png', w: 80, h: 72, cols: 4, count: 12, anchor: [40,70], muzzles: Array(12).fill([40-27, 70-55]) },
+  { id: 'patrolFall', name: 'Patrulheiro (queda)', file: 'patrulheiro-ex-queda.png',  w: 88, h: 72, cols: 4, count: 4,  anchor: [40,70] },
+  { id: 'drone',      name: 'Drone de Cobrança',   file: 'drone-de-cobranca.png',     w: 40, h: 40, cols: 3, count: 3,  anchor: [20,20], muzzles: Array(3).fill([20-8,20]) },
+  { id: 'boss',       name: 'O Cobrador (chefe)',  file: 'o-cobrador.png',            w: 112, h: 64, cols: 3, count: 3, anchor: [60,63], muzzles: [[-56,-41],[-57,-41],[-57,-33]].map(([x,y]) => [60+x, 63+y]) },
+  { group: 'Itens e HUD' },
+  { id: 'medal',      name: 'Medalha (vida extra)', file: 'medalha-bulletz.png',      w: 39, h: 56, cols: 1, count: 1 },
+  { id: 'edu-neutro', name: 'Rosto · neutro',      file: 'edu-neutro.png',   w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'edu-piscada',name: 'Rosto · piscada',     file: 'edu-piscada.png',  w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'edu-esquerda',name:'Rosto · esquerda',    file: 'edu-esquerda.png', w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'edu-direita',name: 'Rosto · direita',     file: 'edu-direita.png',  w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'edu-cima',   name: 'Rosto · cima',        file: 'edu-cima.png',     w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'edu-dor',    name: 'Rosto · dor',         file: 'edu-dor.png',      w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'edu-grito',  name: 'Rosto · grito',       file: 'edu-grito.png',    w: 128, h: 128, cols: 1, count: 1 },
+  { id: 'logo',       name: 'Logo BULLETZ',        file: 'logo-bulletz.png', w: 768, h: 512, cols: 1, count: 1 }
+]
+const items = SPRITES.filter(s => !s.group)
+const $ = (id) => document.getElementById(id)
+const stage = $('stage'), sctx = stage.getContext('2d')
+const state = { sprite: items[0], frame: 0, playing: false, flip: false, grid: true, pts: true, onion: true, zoom: 4, fps: 8, last: 0 }
+const imgs = {}
+let bgImage = null
+const load = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src })
+
+function drawFrame(ctx, s, frame, x, y, scale, flip, alpha = 1) {
+  const img = imgs[s.id]
+  if (!img) return
+  const sx = (frame % s.cols) * s.w, sy = Math.floor(frame / s.cols) * s.h
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.imageSmoothingEnabled = false
+  if (flip) { ctx.translate(x + s.w * scale, y); ctx.scale(-1, 1); ctx.drawImage(img, sx, sy, s.w, s.h, 0, 0, s.w * scale, s.h * scale) }
+  else ctx.drawImage(img, sx, sy, s.w, s.h, x, y, s.w * scale, s.h * scale)
+  ctx.restore()
+}
+
+function paintBackground(ctx, w, h) {
+  const bg = $('bg').value
+  if (bg === 'checker') {
+    for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 16) { ctx.fillStyle = ((x + y) / 16) % 2 ? '#4a4460' : '#3a3450'; ctx.fillRect(x, y, 16, 16) }
+  } else if (bg === 'city' && bgImage) {
+    ctx.imageSmoothingEnabled = false
+    const r = h / bgImage.height; ctx.drawImage(bgImage, 0, 0, bgImage.width * r, h)
+  } else { ctx.fillStyle = bg === 'city' ? '#2b2540' : bg; ctx.fillRect(0, 0, w, h) }
+}
+
+function render() {
+  const s = state.sprite, z = state.zoom, f = state.frame
+  stage.width = s.w * z; stage.height = s.h * z
+  paintBackground(sctx, stage.width, stage.height)
+  if (state.onion && state.sprite.count > 1) drawFrame(sctx, s, (f - 1 + s.count) % s.count, 0, 0, z, state.flip, .28)
+  drawFrame(sctx, s, f, 0, 0, z, state.flip)
+  if (state.grid && z >= 4) {
+    sctx.strokeStyle = 'rgba(255,255,255,.07)'; sctx.lineWidth = 1; sctx.beginPath()
+    for (let x = 0; x <= s.w; x++) { sctx.moveTo(x * z + .5, 0); sctx.lineTo(x * z + .5, stage.height) }
+    for (let y = 0; y <= s.h; y++) { sctx.moveTo(0, y * z + .5); sctx.lineTo(stage.width, y * z + .5) }
+    sctx.stroke()
+  }
+  sctx.strokeStyle = 'rgba(255,255,255,.35)'; sctx.setLineDash([4, 4]); sctx.strokeRect(.5, .5, stage.width - 1, stage.height - 1); sctx.setLineDash([])
+  if (state.pts) {
+    const fx = (p) => (state.flip ? s.w - p[0] : p[0]) * z
+    if (s.anchor) {
+      const x = fx(s.anchor), y = s.anchor[1] * z
+      sctx.strokeStyle = '#47e0ff'; sctx.lineWidth = 2; sctx.beginPath()
+      sctx.moveTo(x - 12, y); sctx.lineTo(x + 12, y); sctx.moveTo(x, y - 12); sctx.lineTo(x, y + 12); sctx.stroke()
+    }
+    const m = s.muzzles && s.muzzles[f]
+    if (m) { sctx.fillStyle = '#ff4d6d'; sctx.beginPath(); sctx.arc(fx(m), m[1] * z, 5, 0, 7); sctx.fill() }
+  }
+  const col = f % s.cols, row = Math.floor(f / s.cols)
+  $('title').textContent = s.name
+  $('meta').textContent = `${s.file} · ${s.w}×${s.h}px por quadro · ${s.count} quadro${s.count > 1 ? 's' : ''}`
+  $('info').innerHTML = `Quadro <b>${f + 1}</b> de <b>${s.count}</b> · coluna ${col + 1}, linha ${row + 1} · recorte x=<b>${col * s.w}</b> y=<b>${row * s.h}</b>`
+    + (s.anchor ? ` · <span style="color:#47e0ff">✚ âncora</span> (${s.anchor.map(n => +n.toFixed(1)).join(', ')})` : '')
+    + (s.muzzles && s.muzzles[f] ? ` · <span style="color:#ff4d6d">● cano</span>` : '')
+  document.querySelectorAll('.thumb').forEach((t, i) => t.classList.toggle('on', i === f))
+}
+
+function buildStrip() {
+  const s = state.sprite, strip = $('strip'), size = Math.min(96, Math.max(48, 520 / Math.min(s.count, 6)))
+  const sc = Math.min(size / s.w, size / s.h)
+  strip.innerHTML = ''
+  for (let i = 0; i < s.count; i++) {
+    const d = document.createElement('div'); d.className = 'thumb'
+    const c = document.createElement('canvas'); c.width = Math.round(s.w * sc); c.height = Math.round(s.h * sc)
+    const cx = c.getContext('2d'); cx.fillStyle = '#2b2540'; cx.fillRect(0, 0, c.width, c.height)
+    drawFrame(cx, s, i, 0, 0, sc, false)
+    d.append(c, String(i + 1)); d.onclick = () => { state.playing = false; setFrame(i) }
+    strip.append(d)
+  }
+}
+
+function setFrame(f) { const n = state.sprite.count; state.frame = ((f % n) + n) % n; render(); updatePlay() }
+function updatePlay() { $('play').textContent = state.playing ? '⏸ Pausar' : '▶ Play'; $('play').classList.toggle('on', state.playing) }
+function pick(s) {
+  state.sprite = s; state.frame = 0; state.playing = s.count > 1
+  document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === s.id))
+  history.replaceState(null, '', '#' + s.id)
+  buildStrip(); render(); updatePlay()
+}
+
+function buildList() {
+  const list = $('list')
+  for (const s of SPRITES) {
+    if (s.group) { const h = document.createElement('h2'); h.textContent = s.group; list.append(h); continue }
+    const b = document.createElement('button'); b.className = 'item'; b.dataset.id = s.id
+    const c = document.createElement('canvas'); c.width = c.height = 40
+    const cx = c.getContext('2d'); const sc = Math.min(40 / s.w, 40 / s.h); cx.imageSmoothingEnabled = false
+    s.thumb = () => { cx.clearRect(0, 0, 40, 40); drawFrame(cx, s, 0, (40 - s.w * sc) / 2, (40 - s.h * sc) / 2, sc, false) }
+    const t = document.createElement('span'); t.innerHTML = `${s.name}<small>${s.count} quadro${s.count > 1 ? 's' : ''}</small>`
+    b.append(c, t); b.onclick = () => pick(s); list.append(b)
+  }
+}
+
+$('prev').onclick = () => { state.playing = false; setFrame(state.frame - 1) }
+$('next').onclick = () => { state.playing = false; setFrame(state.frame + 1) }
+$('play').onclick = () => { state.playing = !state.playing; updatePlay() }
+$('fps').oninput = (e) => { state.fps = +e.target.value; $('fpsv').textContent = state.fps }
+$('zoom').oninput = (e) => { state.zoom = +e.target.value; $('zoomv').textContent = state.zoom + 'x'; render() }
+$('bg').onchange = render
+const toggle = (id, key) => { const b = $(id); b.onclick = () => { state[key] = !state[key]; b.classList.toggle('on', state[key]); render() } }
+toggle('flip', 'flip'); state.flip = false; $('flip').classList.remove('on')
+toggle('grid', 'grid'); toggle('pts', 'pts'); toggle('onion', 'onion')
+
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return
+  const k = e.key.toLowerCase()
+  if (k === 'arrowleft') { state.playing = false; setFrame(state.frame - 1) }
+  else if (k === 'arrowright') { state.playing = false; setFrame(state.frame + 1) }
+  else if (k === ' ') { e.preventDefault(); state.playing = !state.playing; updatePlay() }
+  else if (k === 'arrowup' || k === 'arrowdown') {
+    e.preventDefault(); const i = items.indexOf(state.sprite); pick(items[(i + (k === 'arrowup' ? -1 : 1) + items.length) % items.length])
+  }
+  else if (k === 'f') $('flip').click()
+  else if (k === 'g') $('grid').click()
+  else if (k === 'p') $('pts').click()
+  else if (k === 'o') $('onion').click()
+})
+
+function tick(t) {
+  if (state.playing && state.sprite.count > 1 && t - state.last >= 1000 / state.fps) { state.last = t; setFrame(state.frame + 1) }
+  requestAnimationFrame(tick)
+}
+
+;(async () => {
+  buildList()
+  bgImage = await load('assets/cidade.webp')
+  await Promise.all(items.map(async (s) => { imgs[s.id] = await load('assets/' + s.file) }))
+  items.forEach(s => s.thumb && s.thumb())
+  const missing = items.filter(s => !imgs[s.id])
+  if (missing.length) console.warn('Sprites não encontrados:', missing.map(s => s.file))
+  pick(items.find(s => s.id === location.hash.slice(1)) || items[0])
+  addEventListener('hashchange', () => { const s = items.find(s => s.id === location.hash.slice(1)); if (s && s !== state.sprite) pick(s) })
+  requestAnimationFrame(tick)
+})()
+</script>
+</body>
+</html>

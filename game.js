@@ -3,22 +3,34 @@ const game = select('#game')
 const preview = select('#sprite')
 const ctx = game.getContext('2d')
 const sample = preview.getContext('2d')
+// O mundo continua em 480x270; o canvas tem o dobro de pixels para o Edu (sprites de ~133px)
+// aparecer 1:1 em alta definição, enquanto cenário e inimigos são ampliados 2x.
+const width = 480
+const height = 270
+const pixelScale = 2
+game.width = width * pixelScale
+game.height = height * pixelScale
 ctx.imageSmoothingEnabled = false
 sample.imageSmoothingEnabled = false
-const width = game.width
-const height = game.height
 const end = 6930
 const cell = 96
 const breathingFps = 3
-const crouchFireMuzzle = [24,-26]
-const runFireMuzzles = [[33,-50],[34,-50],[35,-50],[35,-50],[33,-50],[34,-50],[35,-50],[35,-50]]
-const idleFireMuzzle = [24,-49]
+// Folhas do Edu (assets/edu-v2): células de 192x160, eixo do corpo em x=80 e pés em y=152,
+// desenhadas na metade do tamanho em unidades do mundo (1:1 nos pixels do canvas).
+const heroCell = { w: 192, h: 160, anchorX: 80, feetY: 152 }
+const heroSheets = new Set(['idle','run','runFire','idleFire','playerFall','crouch','jump'])
+const jumpTuckLift = 10
+const crouchFireMuzzle = [26,-31]
+const runFireMuzzles = [[26,-50],[28,-50],[27,-50],[28,-50],[28,-50],[28,-50],[28,-50],[28,-50]]
+const idleFireMuzzle = [23,-54]
+const jumpFireMuzzles = [[29,-39-jumpTuckLift],[27,-52]]
 const sequences = {
-  idle: { file: 'respiracao.png', count: 4 },
-  run: { file: 'corrida-colete-jeans.png', count: 8 },
-  runFire: { file: 'corrida-atirando.png', count: 8 },
-  idleFire: { file: 'parado-atirando.png', count: 1 },
-  playerFall: { file: 'edu-queda-sprites.png', count: 4 }
+  idle: { file: 'edu-v2/respiracao.png', count: 4 },
+  run: { file: 'edu-v2/corrida.png', count: 8 },
+  runFire: { file: 'edu-v2/corrida-atirando.png', count: 8 },
+  idleFire: { file: 'edu-v2/parado-atirando.png', count: 1 },
+  playerFall: { file: 'edu-v2/queda.png', count: 4 },
+  jump: { file: 'edu-v2/pulo.png', count: 4 }
 }
 const fallFrameDuration = .11
 const fallDuration = .68
@@ -964,9 +976,15 @@ function playerPose() {
     if (holdingAim) return { sheet: 'crouch', frame: 2, muzzle: crouchFireMuzzle }
     return { sheet: 'crouch', frame: player.crouch < .6 ? 0 : 1 }
   }
-  const running = player.grounded && Math.abs(player.vx) > 8
-  if (running || !player.grounded) {
-    const frame = running ? Math.floor(player.phase) : player.vy < 0 ? 3 : 7
+  if (!player.grounded) {
+    // pulo: 0 subindo, 1 caindo, 2 e 3 os mesmos mirando; subindo, as pernas encolhem e o corpo sobe
+    const rising = player.vy < 0
+    const lift = rising ? jumpTuckLift : 0
+    if (player.trigger || player.cooldown > .04) return { sheet: 'jump', frame: rising ? 2 : 3, lift, muzzle: jumpFireMuzzles[rising ? 0 : 1] }
+    return { sheet: 'jump', frame: rising ? 0 : 1, lift }
+  }
+  if (Math.abs(player.vx) > 8) {
+    const frame = Math.floor(player.phase)
     if (player.trigger || player.cooldown > .04) return { sheet: 'runFire', frame, muzzle: runFireMuzzles[frame] }
     return { sheet: 'run', frame }
   }
@@ -1072,7 +1090,27 @@ function marker(x,y,scroll,isGoal,lit) {
 function atlas(context,sheet,index,x,y,size) {
   context.drawImage(sprites[sheet],(index%4)*cell,Math.floor(index/4)*cell,cell,cell,x,y,size,size)
 }
+// Desenha um quadro do Edu com o eixo do corpo em x e os pés em y; scale = unidades por pixel do sprite
+function heroAtlas(context,sheet,index,x,y,scale) {
+  const { w, h, anchorX, feetY } = heroCell
+  context.drawImage(sprites[sheet],(index%4)*w,Math.floor(index/4)*h,w,h,x-anchorX*scale,y-feetY*scale,w*scale,h*scale)
+}
 function render() {
+  ctx.save()
+  ctx.scale(pixelScale,pixelScale)
+  renderWorld()
+  ctx.restore()
+  sample.clearRect(0,0,preview.width,preview.height)
+  if (heroSheets.has(previewSequence)) heroAtlas(sample,previewSequence,previewFrame,46,74,.46)
+  else atlas(sample,previewSequence,previewFrame,15,-3,82)
+  if (readFrame !== previewFrame) {
+    const count = sequences[previewSequence].count
+    frameText.textContent = count === 1 ? 'POSE FIXA' : 'QUADRO 0' + (previewFrame+1) + ' / 0' + count
+    frameButtons.forEach((button,index) => button.setAttribute('aria-current',String(index===previewFrame)))
+    readFrame = previewFrame
+  }
+}
+function renderWorld() {
   const scroll = Math.round(camera)
   const bgWidth = Math.round(height * sprites.bg.width / sprites.bg.height)
   const scaledWidth = Math.max(640,bgWidth)
@@ -1115,21 +1153,13 @@ function render() {
   ctx.translate(Math.round(player.x-camera),Math.round(player.y))
   ctx.scale(player.face,1)
   const showPlayer = playerFall ? !playerFall.belowMap : lives > 0 && (invulnerability < .01 || Math.floor(invulnerability*14)%2 === 0)
-  if (showPlayer) atlas(ctx,pose.sheet,pose.frame,-39,-67,78)
+  if (showPlayer) heroAtlas(ctx,pose.sheet,pose.frame,0,-(pose.lift || 0),1/pixelScale)
   if (lives > 0 && !finish && pose.muzzle && player.cooldown > .15) {
     const [x,y] = pose.muzzle
     fill(ctx,'#f29440',x-2,y,10,4)
     fill(ctx,'#fff2a7',x+1,y+1,7,2)
   }
   ctx.restore()
-  sample.clearRect(0,0,preview.width,preview.height)
-  atlas(sample,previewSequence,previewFrame,15,-3,82)
-  if (readFrame !== previewFrame) {
-    const count = sequences[previewSequence].count
-    frameText.textContent = count === 1 ? 'POSE FIXA' : 'QUADRO 0' + (previewFrame+1) + ' / 0' + count
-    frameButtons.forEach((button,index) => button.setAttribute('aria-current',String(index===previewFrame)))
-    readFrame = previewFrame
-  }
 }
 // Gestos sutis do retrato enquanto o Edu está ileso: [rosto, duração em ms]
 const idleGestures = [
@@ -1194,7 +1224,7 @@ function tick(now) {
 }
 Promise.all([
   ...Object.entries(sequences).map(([name, { file }]) => loadImage(name,'assets/' + file)),
-  loadImage('crouch','assets/agachamento-colete-jeans.png'),
+  loadImage('crouch','assets/edu-v2/agachamento.png'),
   loadImage('bg','assets/cidade.webp'),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
   loadImage('patrolFall','assets/patrulheiro-ex-queda.png'),
