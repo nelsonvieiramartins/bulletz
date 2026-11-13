@@ -321,6 +321,7 @@ const fullscreenToggle = select('#fullscreen-toggle')
 let mode = 'title'
 let wantFullscreen = false
 let fullscreenExitAt = -Infinity
+let fullscreenRequestAt = -Infinity
 
 function setMode(next) {
   mode = next
@@ -333,6 +334,7 @@ function setMode(next) {
 function enterFullscreen() {
   const root = document.documentElement
   if (document.fullscreenElement || !root.requestFullscreen) return
+  fullscreenRequestAt = performance.now()
   root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
 }
 function startGame() {
@@ -377,7 +379,10 @@ document.addEventListener('fullscreenchange', () => {
   fullscreenExitAt = performance.now()
   openMenu()
 })
-document.addEventListener('visibilitychange', () => { if (document.hidden) openMenu() })
+// Pausa ao trocar de aba; alguns navegadores ocultam a página por um instante ao entrar em tela cheia
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && performance.now() - fullscreenRequestAt > 1500) openMenu()
+})
 
 window.addEventListener('keydown', (event) => {
   if (event.code === 'Escape') {
