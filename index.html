@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0e081a">
+<title>BULLETZ — Divorced Dad Rock</title>
+<link rel="stylesheet" href="style.css?v=14">
+<script type="module" src="game.js?v=13"></script>
+</head>
+<body data-mode="title">
+<main class="stage-shell">
+  <div class="screen" aria-label="Fase jogável">
+    <canvas id="game" width="480" height="270" tabindex="0" aria-label="Use as setas laterais para correr, seta para baixo para agachar e espaço para saltar."></canvas>
+    <div class="player-hud" id="player-hud" aria-label="HUD do Edu">
+      <div class="hud-portrait" aria-hidden="true">
+        <img src="assets/edu-neutro.png" alt="" class="portrait-neutral">
+        <img src="assets/edu-grito.png" alt="" class="portrait-shout">
+        <img src="assets/edu-dor.png" alt="" class="portrait-pain">
+        <img src="assets/edu-esquerda.png" alt="" class="portrait-left">
+        <img src="assets/edu-direita.png" alt="" class="portrait-right">
+        <img src="assets/edu-piscada.png" alt="" class="portrait-blink">
+        <img src="assets/edu-cima.png" alt="" class="portrait-up">
+      </div>
+      <div id="lives" class="hud-lives" role="status" aria-label="3 vidas">
+        <img src="assets/medalha-bulletz.png" alt="">
+        <img src="assets/medalha-bulletz.png" alt="">
+        <img src="assets/medalha-bulletz.png" alt="">
+      </div>
+    </div>
+    <canvas id="hud-score" width="31" height="9" role="img" aria-label="Pontuação: 00000"></canvas>
+    <span id="progress" class="hud-progress">0% DA FASE</span>
+    <div id="boss-hud" class="boss-hud" hidden>O COBRADOR <meter id="boss-health" aria-label="Vida do Cobrador" min="0" max="24" value="24"></meter></div>
+    <div id="notice" role="status" hidden></div>
+    <span class="esc-hint" aria-hidden="true"><kbd>ESC</kbd> MENU</span>
+
+    <div class="touch" aria-label="Controles de toque">
+      <button data-key="ArrowLeft" aria-label="Correr à esquerda">◀</button>
+      <button data-key="ArrowRight" aria-label="Correr à direita">▶</button>
+      <button data-key="ArrowDown" aria-label="Segure para agachar">▼</button>
+      <button data-key="Space">SALTAR</button>
+      <button data-key="KeyX">DISPARAR</button>
+      <button id="touch-menu" type="button" aria-label="Abrir menu">☰</button>
+    </div>
+
+    <section id="title-screen" class="overlay title-screen" aria-label="Tela inicial">
+      <img class="title-logo" src="assets/logo-bulletz.png" alt="BULLETZ — Divorced Dad Rock">
+      <button id="start" type="button" class="start-button">INICIAR JOGO</button>
+      <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
+    </section>
+
+    <section id="menu" class="overlay menu" aria-label="Menu" hidden>
+      <div class="menu-panel">
+        <header class="menu-head">
+          <img src="assets/logo-bulletz.png" alt="BULLETZ" class="menu-logo">
+          <div>
+            <div class="eyebrow">PAUSA · FASE 1</div>
+            <strong>A CIDADE DOS BOLETOS</strong>
+          </div>
+        </header>
+        <div class="menu-actions">
+          <button id="resume" type="button" class="start-button">CONTINUAR</button>
+          <button id="reset" type="button">Reiniciar fase <span aria-hidden="true">↻</span></button>
+          <button id="fullscreen-toggle" type="button">Tela cheia</button>
+        </div>
+
+        <details class="menu-section" open>
+          <summary>Controles</summary>
+          <div class="keys">
+            <span><kbd>←</kbd> <kbd>→</kbd> Correr</span>
+            <span><kbd>Espaço</kbd> Saltar</span>
+            <span><kbd>↓</kbd> <kbd>S</kbd> Agachar</span>
+            <span><kbd>X</kbd> Disparar</span>
+            <span><kbd>R</kbd> Reiniciar</span>
+            <span><kbd>ESC</kbd> Menu</span>
+          </div>
+          <div class="padbar" aria-label="Controles do joystick">
+            <span id="pad-status" role="status">Nenhum controle detectado. Conecte-o e pressione um botão.</span>
+            <button id="pad-setup" type="button" hidden>Configurar controle</button>
+            <span id="pad-prompt" role="status" hidden></span>
+            <span class="padmap">Analógico ou direcional para mover · <kbd>↓</kbd> agachar · <kbd>A / ✕</kbd> saltar · <kbd>X / □</kbd> disparar · <kbd>Menu / Options</kbd> abre o menu</span>
+          </div>
+        </details>
+
+        <details class="menu-section" open>
+          <summary>Trilha sonora</summary>
+          <div id="music-controls" class="music-row" aria-label="Trilha sonora">
+            <span>BULLETS — CREED</span>
+            <label>Volume <input id="music-volume" type="range" min="0" max="100" value="38"></label>
+            <button id="music-toggle" type="button">Tocar trilha</button>
+            <audio id="music" src="assets/bullets-riff.mp3" preload="none" loop></audio>
+          </div>
+        </details>
+
+        <details class="menu-section">
+          <summary>História</summary>
+          <div class="eyebrow">ANO 1987</div>
+          <p>Os EX-TERMINADORES dominam o mundo com pensões intergalácticas e boletos infinitos. Quatro veteranos do rock formam a unidade BULLETZ para derrubar o Dr. Alimônio.</p>
+          <p>Uma guitarra lendária e um amplificador de 100 mil watts podem virar o jogo.</p>
+          <a class="test-link" href="https://operacao-cascata-arcade.nelsonvieiramartins.chatgpt.site/">Abrir Operação Cascata ↗</a>
+        </details>
+
+        <details class="menu-section">
+          <summary>Inimigos da fase</summary>
+          <ul>
+            <li><strong>Patrulheiro EX</strong><br>Corre pela cidade, salta entre plataformas e para para mirar. <a class="test-link" href="assets/patrulheiro-ex-movimento-v2.png" download>Movimento PNG</a> · <a class="test-link" href="assets/patrulheiro-ex-queda.png" download>Queda PNG</a></li>
+            <li><strong>Drone de Cobrança</strong><br>Flutua sobre a rua e acende o visor âmbar antes de disparar em diagonal. <a class="test-link" href="assets/drone-de-cobranca.png" download>Sprites PNG</a></li>
+            <li><strong>Patrulheiro Elite</strong><br>Versão blindada em vermelho: aguenta mais tiros, corre mais e dispara mais rápido.</li>
+            <li><strong>Drone Pesado</strong><br>Drone avermelhado que solta dois disparos de uma vez, um deles bem inclinado.</li>
+            <li><strong>O Cobrador</strong><br>Blindado que alterna tiros altos e baixos. Com metade da vida, acelera e passa a soltar tiros duplos. <a class="test-link" href="assets/o-cobrador.png" download>Sprites PNG</a></li>
+          </ul>
+        </details>
+
+        <details class="menu-section">
+          <summary>Campanha</summary>
+          <ol>
+            <li><strong>A Cidade dos Boletos</strong><br>O Cobrador · Jogável</li>
+            <li>A Selva da Guarda Compartilhada<br>General Fim de Semana</li>
+            <li>O Shopping da Pensão<br>Robô Cartão de Crédito</li>
+            <li>O Tribunal do Apocalipse<br>Juiz Exterminador</li>
+            <li>A Fortaleza da Ex-Sogra<br>Sogra 3000</li>
+            <li>O Planeta Alimônio<br>Dr. Alimônio</li>
+          </ol>
+        </details>
+
+        <details class="menu-section">
+          <summary>Animações do Edu</summary>
+          <label class="eyebrow sequence">ANIMAÇÃO
+            <select id="sequence">
+              <option value="run">Corrida</option>
+              <option value="idle">Respiração</option>
+              <option value="runFire">Correndo e atirando</option>
+              <option value="idleFire">Parado e atirando</option>
+              <option value="playerFall">Queda do Edu</option>
+            </select>
+          </label>
+          <div class="preview"><canvas id="sprite" width="112" height="76" aria-label="Prévia da animação"></canvas></div>
+          <div class="readout"><span id="frame">QUADRO 01 / 08</span><span id="rate">12 QPS</span></div>
+          <div class="timeline" aria-label="Quadros da animação"></div>
+          <div class="playback">
+            <button id="play" type="button" aria-pressed="true">Pausar</button>
+            <label>Ritmo <select id="speed"><option value="2">2 qps</option><option value="3">3 qps</option><option value="6">6 qps</option><option value="12" selected>12 qps</option><option value="18">18 qps</option></select></label>
+          </div>
+          <a class="download" href="assets/corrida-colete-jeans.png" download>Baixar sprite sheet <span aria-hidden="true">↓</span></a>
+          <small id="frame-info">8 quadros · células de 96 × 96 px · PNG</small>
+        </details>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>

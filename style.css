@@ -1,0 +1,87 @@
+:root{color-scheme:dark;--bg:#0e081a;--panel:#1b1028;--line:#482c56;--amber:#ffba63;--green:#ff8abb;--muted:#d0bcd7;--mono:"IBM Plex Mono","Courier New",monospace}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:#05030a;color:#f7f2e9;font:15px system-ui,sans-serif;overflow:hidden}
+.eyebrow,.readout,small{font:700 11px/1.4 var(--mono);letter-spacing:.095em}.eyebrow{color:var(--green)}
+
+/* Tela do jogo ocupando a janela inteira, sempre em 16:9 */
+.stage-shell{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 30%,#1d0f2b,#05030a 70%)}
+.screen{position:relative;width:min(100vw,calc(100vh * 16 / 9));aspect-ratio:16/9;background:#0a1726;container-type:inline-size;overflow:hidden;--hud-inset:clamp(6px,1.4cqw,18px)}
+canvas{display:block;image-rendering:pixelated}
+#game{width:100%;height:100%;outline:none}
+#notice{position:absolute;inset:auto 0 16%;width:max-content;max-width:95%;margin:auto;background:#09141ceb;padding:10px 16px;border:1px solid var(--amber);color:var(--amber);font:700 clamp(11px,1.5cqw,18px) var(--mono);pointer-events:none}
+
+kbd{font:inherit;background:#2a1838;border:1px solid #5d3d6b;border-bottom-width:2px;padding:2px 5px;border-radius:3px;color:#f7f2e9}
+button,select{font:700 12px var(--mono);color:#f7f2e9;background:#2a1838;border:1px solid #5d3d6b;padding:8px 11px;cursor:pointer}
+button:hover,select:hover{border-color:var(--green)}button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+/* HUD */
+.player-hud{position:absolute;top:var(--hud-inset);left:var(--hud-inset);display:flex;align-items:flex-start;gap:clamp(4px,1.1cqw,14px);pointer-events:none}
+#hud-score{position:absolute;top:var(--hud-inset);right:var(--hud-inset);width:clamp(62px,16%,220px);height:auto;filter:drop-shadow(2px 2px 0 #6f2819);pointer-events:none}
+.hud-progress{position:absolute;right:var(--hud-inset);top:calc(var(--hud-inset) + clamp(18px,5cqw,64px));font:700 clamp(9px,1.1cqw,14px) var(--mono);letter-spacing:.1em;color:#ffdca8;text-shadow:1px 1px 0 #3a1028;pointer-events:none}
+.hud-portrait{position:relative;width:clamp(46px,10cqw,140px);aspect-ratio:1;overflow:hidden;background:radial-gradient(ellipse at 50% 90%,#54314b,#231326 80%);border:1px solid #8b4e49;box-shadow:2px 2px 0 #10091b}
+.hud-portrait img{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;visibility:hidden}
+.player-hud:not([data-face]) .portrait-neutral,.player-hud[data-face=neutral] .portrait-neutral,.player-hud[data-face=shout] .portrait-shout,.player-hud[data-face=pain] .portrait-pain,.player-hud[data-face=left] .portrait-left,.player-hud[data-face=right] .portrait-right,.player-hud[data-face=blink] .portrait-blink,.player-hud[data-face=up] .portrait-up{visibility:visible}
+.player-hud[data-face=shout] .hud-portrait{border-color:#ff6f59;background:#562031}
+.hud-lives{display:flex;gap:clamp(1px,.3cqw,4px);padding-top:3px}
+.hud-lives img{height:clamp(24px,5cqw,68px);width:auto;aspect-ratio:39/56;image-rendering:pixelated;filter:drop-shadow(2px 2px 0 #16091d) drop-shadow(0 3px 3px #000000b0)}
+.hud-lives img[data-spent]{opacity:.23;filter:grayscale(1) drop-shadow(2px 2px 0 #16091d)}
+.boss-hud{position:absolute;top:calc(var(--hud-inset) + clamp(46px,10cqw,140px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;background:#14091ce8;color:#ffaf8d;padding:4px 8px;font:700 clamp(10px,1.2cqw,15px) var(--mono);pointer-events:none}
+.boss-hud meter{width:clamp(48px,8cqw,110px);vertical-align:middle;accent-color:#ff686e}
+.esc-hint{position:absolute;left:var(--hud-inset);bottom:var(--hud-inset);font:700 clamp(9px,1cqw,12px) var(--mono);letter-spacing:.1em;color:#fff;opacity:.45;pointer-events:none}
+.esc-hint kbd{padding:1px 4px}
+
+/* Modos: título, jogando, menu */
+body[data-mode=title] .player-hud,body[data-mode=title] #hud-score,body[data-mode=title] .hud-progress,body[data-mode=title] .esc-hint{opacity:0}
+body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
+.overlay{position:absolute;inset:0;z-index:5}
+.overlay[hidden]{display:none}
+
+.title-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,2.4cqw,32px);background:radial-gradient(ellipse at 50% 45%,#12081ccc,#05030af2 75%);text-align:center}
+.title-logo{width:min(62cqw,760px);height:auto;filter:drop-shadow(0 0 24px #ff8a4a44);animation:logo-in .9s cubic-bezier(.2,.8,.2,1) both}
+.start-button{font:900 clamp(14px,2.2cqw,28px)/1 var(--mono);letter-spacing:.14em;color:#1a0a10;background:linear-gradient(#ffe7a6,#ffb35a 55%,#ff7a45);border:2px solid #fff2c9;box-shadow:0 4px 0 #8f2a24,0 0 22px #ff9a5066;padding:.8em 1.6em;text-shadow:0 1px 0 #fff5}
+.start-button:hover{border-color:#fff;filter:brightness(1.08)}
+.start-button:active{transform:translateY(3px);box-shadow:0 1px 0 #8f2a24}
+.title-screen .start-button{animation:pulse 1.2s ease-in-out infinite}
+.title-hint{margin:0;font:700 clamp(9px,1.1cqw,13px) var(--mono);letter-spacing:.16em;color:#d9c3e4;opacity:.75}
+@keyframes pulse{50%{box-shadow:0 4px 0 #8f2a24,0 0 36px #ffb25aaa}}
+@keyframes logo-in{from{opacity:0;transform:scale(.92)}}
+@media(prefers-reduced-motion:reduce){.title-logo,.title-screen .start-button{animation:none}}
+
+/* Menu de pausa */
+.menu{display:grid;place-items:center;background:#07030ccc;backdrop-filter:blur(3px);padding:clamp(8px,2cqw,28px)}
+.menu-panel{width:min(640px,100%);max-height:100%;overflow:auto;background:var(--panel);border:1px solid var(--line);box-shadow:0 18px 44px #000a;padding:16px 18px;font-size:14px}
+.menu-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.menu-head strong{font:900 15px var(--mono);letter-spacing:.06em;color:#fff2e3}
+.menu-logo{width:110px;height:auto}
+.menu-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.menu-actions .start-button{font-size:14px;padding:10px 18px}
+.menu-section{border-top:1px solid var(--line);padding:10px 0;font:12px/1.55 var(--mono);color:var(--muted)}
+.menu-section summary{cursor:pointer;color:#fff2e3;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.menu-section p{font:13px/1.55 system-ui,sans-serif;color:#e1d0e4;margin:8px 0}
+.menu-section ol,.menu-section ul{padding-left:21px}.menu-section li{margin:6px 0}
+.keys{display:flex;flex-wrap:wrap;gap:8px 16px;margin:10px 0}
+.keys span{white-space:nowrap}
+.padbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.9}
+#pad-status[data-state=connected],#pad-status[data-state=configured]{color:var(--green)}
+#pad-status[data-state=generic],#pad-status[data-state=unavailable],#pad-prompt{color:var(--amber)}
+.padmap,#pad-prompt{flex-basis:100%}
+.music-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px}
+.music-row label{display:flex;align-items:center;gap:6px}
+#music-volume{width:110px;accent-color:var(--amber)}
+.test-link{font-size:12px;color:var(--amber)}
+
+/* Prévia das animações */
+.preview{margin:12px 0 10px;max-width:280px;background-color:#09131d;background-image:linear-gradient(45deg,#14232e 25%,transparent 25%,transparent 75%,#14232e 75%),linear-gradient(45deg,#14232e 25%,transparent 25%,transparent 75%,#14232e 75%);background-size:20px 20px;background-position:0 0,10px 10px;border:1px solid var(--line)}
+.preview canvas{width:100%}
+.readout,.playback,.download{display:flex;align-items:center;justify-content:space-between;gap:7px;max-width:280px}.readout{color:var(--muted)}#rate{color:var(--green)}
+.sequence{display:grid;gap:6px;max-width:280px;margin-top:8px}.sequence select{width:100%}
+.timeline{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;margin:10px 0;max-width:280px}.timeline button{padding:0;height:27px}.timeline button[aria-current=true]{background:var(--amber);color:#161009;border-color:var(--amber)}
+.timeline[hidden],.playback[hidden]{display:none}
+.playback label{font:12px var(--mono);color:var(--muted)}.playback select{margin-left:3px}
+.download{margin-top:15px;padding:10px 0 8px;border-top:1px solid var(--line);color:var(--amber);font-weight:700;text-decoration:none}.download:hover{text-decoration:underline}small{color:var(--muted);letter-spacing:0}
+
+/* Controles de toque por cima do jogo */
+.touch{display:none;position:absolute;left:0;right:0;bottom:0;z-index:4;gap:6px;padding:8px;touch-action:none;background:linear-gradient(transparent,#0008)}
+.touch button{flex:1;min-height:43px;touch-action:none;background:#2a1838bb}
+@media(pointer:coarse){.touch{display:flex}.esc-hint{display:none}}
