@@ -29,7 +29,7 @@ const sequences = {
   run: { file: 'edu-v2/corrida.png', count: 8 },
   runFire: { file: 'edu-v2/corrida-atirando.png', count: 8 },
   idleFire: { file: 'edu-v2/parado-atirando.png', count: 1 },
-  playerFall: { file: 'edu-v2/queda.png', count: 4 },
+  playerFall: { file: 'edu-v2/queda.png?v=2', count: 4 },
   jump: { file: 'edu-v2/pulo.png', count: 4 }
 }
 const fallFrameDuration = .11
