@@ -21,13 +21,14 @@ const heroCell = { w: 192, h: 160, anchorX: 80, feetY: 152 }
 const heroSheets = new Set(['idle','run','runFire','idleFire','playerFall','crouch','jump'])
 const jumpTuckLift = 10
 const crouchFireMuzzle = [26,-31]
-const runFireMuzzles = [[26,-50],[28,-50],[27,-50],[28,-50],[28,-50],[28,-50],[28,-50],[28,-50]]
+// Cano por quadro: o tronco da corrida atirando segue o balanço das pernas da corrida
+const runFireMuzzles = [[26,-48.5],[28,-50],[27,-49.5],[28,-51],[28,-47.5],[28,-49.5],[28,-50],[28,-50]]
 const idleFireMuzzle = [23,-54]
 const jumpFireMuzzles = [[29,-39-jumpTuckLift],[27,-52]]
 const sequences = {
   idle: { file: 'edu-v2/respiracao.png', count: 4 },
-  run: { file: 'edu-v2/corrida.png', count: 8 },
-  runFire: { file: 'edu-v2/corrida-atirando.png', count: 8 },
+  run: { file: 'edu-v2/corrida.png?v=3', count: 8 },
+  runFire: { file: 'edu-v2/corrida-atirando.png?v=2', count: 8 },
   idleFire: { file: 'edu-v2/parado-atirando.png', count: 1 },
   playerFall: { file: 'edu-v2/queda.png?v=2', count: 4 },
   jump: { file: 'edu-v2/pulo.png', count: 4 }

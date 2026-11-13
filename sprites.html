@@ -95,14 +95,27 @@ const playerAnchor = [48, 67 / K]
 const pm = (m) => m && [playerAnchor[0] + m[0] / K, playerAnchor[1] + m[1] / K]
 const runFireMuzzles = [[33,-50],[34,-50],[35,-50],[35,-50],[33,-50],[34,-50],[35,-50],[35,-50]].map(pm)
 
+// Edu novo (assets/edu-v2): células de 192x160, pés em (80,152), 1 unidade do jogo = 2 px do sprite
+const HW = 192, HH = 160
+const heroAnchor = [80, 152]
+const hm = (m) => m && [heroAnchor[0] + m[0] * 2, heroAnchor[1] + m[1] * 2]
+const heroRunFireMuzzles = [[26,-48.5],[28,-50],[27,-49.5],[28,-51],[28,-47.5],[28,-49.5],[28,-50],[28,-50]].map(hm)
+const hero = { w: HW, h: HH, anchor: heroAnchor }
+
 const SPRITES = [
   { group: 'Edu (jogador)' },
-  { id: 'idle',       name: 'Respiração (parado)', file: 'respiracao.png',            w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
-  { id: 'run',        name: 'Corrida',             file: 'corrida-colete-jeans.png',  w: S, h: S, cols: 4, count: 8, anchor: playerAnchor },
-  { id: 'runFire',    name: 'Corrida atirando',    file: 'corrida-atirando.png',      w: S, h: S, cols: 4, count: 8, anchor: playerAnchor, muzzles: runFireMuzzles },
-  { id: 'idleFire',   name: 'Parado atirando',     file: 'parado-atirando.png',       w: S, h: S, cols: 1, count: 1, anchor: playerAnchor, muzzles: [pm([24,-49])] },
-  { id: 'crouch',     name: 'Agachado',            file: 'agachamento-colete-jeans.png', w: S, h: S, cols: 3, count: 3, anchor: playerAnchor, muzzles: [null, null, pm([24,-26])] },
-  { id: 'playerFall', name: 'Queda',               file: 'edu-queda-sprites.png',     w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
+  { id: 'idle',       name: 'Respiração (parado)', file: 'edu-v2/respiracao.png',       ...hero, cols: 4, count: 4 },
+  { id: 'run',        name: 'Corrida',             file: 'edu-v2/corrida.png',          ...hero, cols: 4, count: 8 },
+  { id: 'runFire',    name: 'Corrida atirando',    file: 'edu-v2/corrida-atirando.png', ...hero, cols: 4, count: 8, muzzles: heroRunFireMuzzles },
+  { id: 'idleFire',   name: 'Parado atirando',     file: 'edu-v2/parado-atirando.png',  ...hero, cols: 1, count: 1, muzzles: [hm([23,-54])] },
+  { id: 'crouch',     name: 'Agachado',            file: 'edu-v2/agachamento.png',      ...hero, cols: 3, count: 3, muzzles: [null, null, hm([26,-31])] },
+  { id: 'jump',       name: 'Pulo',                file: 'edu-v2/pulo.png',             ...hero, cols: 4, count: 4, muzzles: [null, null, hm([29,-39]), hm([27,-52])] },
+  { id: 'playerFall', name: 'Morte (queda)',       file: 'edu-v2/queda.png?v=2',        ...hero, cols: 4, count: 4 },
+  { group: 'Edu antigo (96 px, para comparar)' },
+  { id: 'old-idle',       name: 'Respiração (antigo)', file: 'respiracao.png',            w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
+  { id: 'old-run',        name: 'Corrida (antigo)',    file: 'corrida-colete-jeans.png',  w: S, h: S, cols: 4, count: 8, anchor: playerAnchor },
+  { id: 'old-runFire',    name: 'Corrida atirando (antigo)', file: 'corrida-atirando.png', w: S, h: S, cols: 4, count: 8, anchor: playerAnchor, muzzles: runFireMuzzles },
+  { id: 'old-playerFall', name: 'Queda (antigo)',      file: 'edu-queda-sprites.png',     w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
   { group: 'Inimigos' },
   { id: 'patrol',     name: 'Patrulheiro Ex',      file: 'patrulheiro-ex-movimento-v2.png', w: 80, h: 72, cols: 4, count: 12, anchor: [40,70], muzzles: Array(12).fill([40-27, 70-55]) },
   { id: 'patrolFall', name: 'Patrulheiro (queda)', file: 'patrulheiro-ex-queda.png',  w: 88, h: 72, cols: 4, count: 4,  anchor: [40,70] },
@@ -198,6 +211,9 @@ function buildStrip() {
 function setFrame(f) { const n = state.sprite.count; state.frame = ((f % n) + n) % n; render(); updatePlay() }
 function updatePlay() { $('play').textContent = state.playing ? '⏸ Pausar' : '▶ Play'; $('play').classList.toggle('on', state.playing) }
 function pick(s) {
+  // sprites grandes (Edu novo, logo) reduzem o zoom para caber na área de visualização
+  const fit = Math.max(1, Math.min(10, Math.floor(620 / s.w)))
+  if (s.w * state.zoom > 620) { state.zoom = fit; $('zoom').value = fit; $('zoomv').textContent = fit + 'x' }
   state.sprite = s; state.frame = 0; state.playing = s.count > 1
   document.querySelectorAll('.item').forEach(b => b.classList.toggle('on', b.dataset.id === s.id))
   history.replaceState(null, '', '#' + s.id)
