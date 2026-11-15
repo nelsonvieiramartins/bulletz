@@ -780,6 +780,41 @@ for (const button of document.querySelectorAll('[data-key]')) {
 }
 select('#reset').onclick = () => { reset(); resumeGame() }
 
+// Controle de celular em pé (imagem embaixo da tela): o direcional lê a posição do dedo (esquerda/direita/baixo/cima = saltar,
+// com diagonais e deslizando sem levantar), A salta, B atira (botões com data-key, tratados acima), START abre/fecha o menu
+// e SELECT liga a tela cheia. Cada botão acende ao ser tocado.
+{
+  const dpad = select('#pad-dpad')
+  const glows = Object.fromEntries([...document.querySelectorAll('.pad-glow')].map(g => [g.dataset.dir, g]))
+  const dirKeys = { left: 'ArrowLeft', right: 'ArrowRight', down: 'ArrowDown', up: 'ArrowUp' }
+  let held = new Set(), pointer = null
+  function dpadSet(next) {
+    for (const d of Object.keys(dirKeys)) {
+      const on = next.has(d)
+      if (on !== held.has(d)) { setKey(dirKeys[d], on); glows[d].classList.toggle('on', on) }
+    }
+    held = next
+  }
+  function dpadRead(event) {
+    const r = dpad.getBoundingClientRect()
+    const dx = (event.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (event.clientY - (r.top + r.height / 2)) / (r.height / 2)
+    const next = new Set()
+    if (dx < -.3) next.add('left'); else if (dx > .3) next.add('right')
+    if (dy > .35) next.add('down'); else if (dy < -.35) next.add('up')
+    dpadSet(next)
+  }
+  dpad.addEventListener('pointerdown', (event) => { event.preventDefault(); pointer = event.pointerId; dpad.setPointerCapture(pointer); dpadRead(event) })
+  dpad.addEventListener('pointermove', (event) => { if (event.pointerId === pointer) dpadRead(event) })
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) dpad.addEventListener(type, (event) => { if (event.pointerId === pointer) { pointer = null; dpadSet(new Set()) } })
+  for (const button of document.querySelectorAll('.pad [data-key], #pad-start, #pad-select')) {
+    button.addEventListener('pointerdown', () => button.classList.add('on'))
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, () => button.classList.remove('on'))
+  }
+  select('#pad-start').onclick = () => { if (mode === 'title') startGame(); else if (mode === 'play') openMenu(); else resumeGame() }
+  select('#pad-select').onclick = () => fullscreenToggle.click()
+  select('#pad').addEventListener('contextmenu', (event) => event.preventDefault())
+}
+
 function setPlaying(value) {
   previewPlaying = value
   play.textContent = value ? 'Pausar' : 'Reproduzir'
