@@ -1264,6 +1264,7 @@ function showGameOver() {
   const left = continuesLeft()
   continueButton.hidden = left === 0
   continueButton.textContent = 'CONTINUAR · ' + left
+  continueButton.dataset.count = '×' + left
   restartButton.textContent = left === 0 ? 'VOLTAR AO INÍCIO' : 'REINICIAR JOGO'
   gameOverScreen.classList.remove('ready')
   gameOverScreen.hidden = false

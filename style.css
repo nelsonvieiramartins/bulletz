@@ -123,3 +123,23 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 }
 
 .ios-hint{color:#ffd9a0;opacity:1;max-width:90%;line-height:1.5}
+
+/* Botões com arte (assets/botoes): normal, em foco/sob o cursor e apertado. O texto fica só para leitores de tela */
+.art-btn{position:relative;width:clamp(130px,38cqw,340px);aspect-ratio:410/174;padding:0;border:0;font-size:0;color:transparent;text-shadow:none;background:transparent center/100% 100% no-repeat;image-rendering:auto;box-shadow:none}
+.art-iniciar{background-image:url(assets/botoes/iniciar-normal.png)}
+.art-continuar{background-image:url(assets/botoes/continuar-normal.png)}
+.art-reiniciar{background-image:url(assets/botoes/reiniciar-normal.png)}
+.art-iniciar:hover,.art-iniciar:focus-visible{background-image:url(assets/botoes/iniciar-hover.png)}
+.art-continuar:hover,.art-continuar:focus-visible{background-image:url(assets/botoes/continuar-hover.png)}
+.art-reiniciar:hover,.art-reiniciar:focus-visible{background-image:url(assets/botoes/reiniciar-hover.png)}
+.art-iniciar:active{background-image:url(assets/botoes/iniciar-press.png)}
+.art-continuar:active{background-image:url(assets/botoes/continuar-press.png)}
+.art-reiniciar:active{background-image:url(assets/botoes/reiniciar-press.png)}
+.art-btn:hover,.art-btn:active{border:0;filter:none;transform:none;box-shadow:none}
+.art-btn:focus-visible{outline:none}
+.art-btn::before{content:url(assets/botoes/iniciar-hover.png) url(assets/botoes/iniciar-press.png) url(assets/botoes/continuar-hover.png) url(assets/botoes/continuar-press.png) url(assets/botoes/reiniciar-hover.png) url(assets/botoes/reiniciar-press.png);position:absolute;width:0;height:0;overflow:hidden;visibility:hidden}
+.art-btn[data-count]::after{content:attr(data-count);position:absolute;right:2%;top:-6%;min-width:2.4em;padding:.15em .4em;font:900 clamp(10px,1.5cqw,16px)/1.2 var(--mono);letter-spacing:.04em;text-align:center;color:#ffe7a6;background:#1a0a10;border:2px solid #ffb35a;border-radius:99px;box-shadow:0 0 8px #ff8a2a88}
+.title-screen .start-button.art-btn{animation:art-pulse 1.2s ease-in-out infinite}
+.gameover .start-button.art-btn{width:clamp(120px,30cqw,300px);animation:go-button .5s 1.5s steps(5,end) both,art-pulse 1.2s 2s ease-in-out infinite}
+@keyframes art-pulse{50%{filter:brightness(1.12) drop-shadow(0 0 12px #ffb25a99)}}
+@media(prefers-reduced-motion:reduce){.title-screen .start-button.art-btn,.gameover .start-button.art-btn{animation:none}}
