@@ -19,6 +19,7 @@ export const meta = {
     palette: ["#2a0c10", "#5c1414", "#a3241a", "#e0481c", "#ff8a2a", "#ffc23d", "#fff0a0", "#ffffff"],
     stone: "#4a3f69",
     seed: 5,
+    slamOnly: false, // só a pancada no chão (estrela, rachaduras, poeira e o abalo), centrada no ponto dado; começa já no impacto
   },
 };
 
@@ -58,12 +59,12 @@ export function create(o) {
   let U1 = 0;
   while (onSwing(A, A.R, U1)[1] < -0.5 && U1 < 4) U1 += 0.005;
   const E = { ...A, R: A.R * 0.76 }, W = 16, WE = 5;
-  const [X] = onSwing(A, A.R - 2, U1), GLINT = onSwing(A, A.R - 3, 0);
+  const X = o.slamOnly ? 0 : onSwing(A, A.R - 2, U1)[0], GLINT = onSwing(A, A.R - 3, 0);
   const lines = cracks(R, X, 4, 40, 7, 0.4);
   // the impact star: long spikes along the floor, shorter ones up
   const spikes = [-Math.PI, -2.7, -2.15, -1.62, -1.05, -0.45, 0].map((a, i) => ({ a: a + R.range(-0.08, 0.08), len: (i === 0 || i === 6 ? 20 : i === 3 ? 15 : 9) + R.range(0, 4), w: 1.6 + R.range(0, 0.6) }));
   const shards = [-2.5, -1.9, -1.2, -0.6].map((a) => ({ a: a + R.range(-0.15, 0.15), r: 8 + R.range(0, 3), v: R.range(80, 130), arc: R.range(0.35, 0.6) }));
-  let t = 0, hit = false;
+  let t = o.slamOnly ? HIT : 0, hit = false;
 
   const arc = (p, s, w0, lag, rim) => {
     const tt = t - lag, U = U1 * head(tt), T = U1 * smooth(HIT + HOLD, HIT + HOLD + TRAIL, tt);
@@ -181,6 +182,7 @@ export function create(o) {
         if (k < 1) band(p, X, 0.5, 6 + 46 * ease.outCubic(k), 0.16, Math.max(1, 3 * (1 - k)), 1.15 - k, [st.body, st.light, C[4], C[6]], (g) => Math.sin(g) >= 0);
       }
       // the arc and its echo, then a dotted trace of embers where it has been
+      if (!o.slamOnly) {
       arc(p, E, WE, 0.02, false);
       arc(p, A, W, 0, true);
       const tail = U1 * smooth(HIT + HOLD, HIT + HOLD + TRAIL, t), th = 0.8 * (1 - clamp((t - HIT - HOLD) / (TRAIL + 0.25)));
@@ -188,6 +190,7 @@ export function create(o) {
       if (t > RAISE && t < HIT + 0.05) {
         const [x, y] = onSwing(A, A.R - 5, U1 * head(t));
         p.glow(x, y, 40, C[4], 0.5);
+      }
       }
       // the white slam: an impact star flat on the floor, then slivers flying off and a hot pool
       if (q >= 0 && q < 0.035) star(p, X, -1, spikes, 1, 1, WHITE, C[6], C[7], C[5]);

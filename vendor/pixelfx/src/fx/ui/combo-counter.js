@@ -1,4 +1,4 @@
-import { Particles, Lights, P, Rng, fit, sparkle, clamp, seg, ease, rand, TAU, WHITE, scale } from "../../core/index.js";
+import { Particles, Lights, P, Rng, fit, sparkle, clamp, seg, ease, rand, TAU, WHITE, scale, FONTS } from "../../core/index.js";
 import { spell, drawWord, shake } from "./_lib.js";
 
 export const meta = {
@@ -11,10 +11,18 @@ export const meta = {
   loop: false,
   fps: 30,
   bg: "dark",
-  options: { palette: ["#1a0516", "#3d0a33", "#701560", "#b0228f", "#f53cd1", "#ff86e6", "#ffd2f6", "#ffffff"], count: 5, label: "COMBO", seed: 6 },
+  options: { palette: ["#1a0516", "#3d0a33", "#701560", "#b0228f", "#f53cd1", "#ff86e6", "#ffd2f6", "#ffffff"], count: 5, label: "COMBO", seed: 6,
+    text: null, // no lugar do "x5": uma palavra grande (ex.: "ESTÁGIO"), com o label ao lado
+    hold: 0 },  // segundos a mais com o texto parado antes de sair (a duração do meta não muda: quem usa controla o fim)
 };
 
 const HIT = 0.1, BEAT = 0.5, OUT = 1.1;
+
+// letras com acento agudo (o pixel font não tem): uma linha a mais por cima; o layout sobe a letra para manter a base
+for (const [ch, base, col] of [["Á", "A", 3], ["Í", "I", 2]]) {
+  const g = FONTS.big.glyphs[base];
+  if (g && !FONTS.big.glyphs[ch]) FONTS.big.glyphs[ch] = { w: g.w, rows: [Array.from({ length: g.w }, (_, i) => i === col), ...g.rows] };
+}
 
 // a burst of speed lines across the frame, re-thrown every frame like a comic panel; k fades them
 function speedLines(p, C, t, k, dir) {
@@ -31,7 +39,8 @@ function speedLines(p, C, t, k, dir) {
 export function create(o) {
   const C = fit(o.palette, 8), R = new Rng(o.seed), SHADOW = scale(C[0], 0.5);
   const ps = new Particles({ rng: R, sparks: [C[7], C[6], C[5], C[3]] }), lights = new Lights();
-  const big = spell("x" + Math.round(o.count)), lab = spell(o.label);
+  const OUT = 1.1 + (o.hold ?? 0);
+  const big = spell(o.text ?? "x" + Math.round(o.count)), lab = spell(o.label);
   const BS = 4, LS = 2, W = big.w * BS + 4 + lab.w * LS, X0 = -W / 2, BASE = 12;
   const spikes = Array.from({ length: 10 }, (_, i) => [(i / 10) * TAU + R.range(-0.15, 0.15), R.range(14, 24)]);
   let t = 0, hit = false, out = false;
@@ -96,9 +105,9 @@ export function create(o) {
       const layout = (dx) => {
         const bs = BS * (1 + 0.12 * pulse), items = [];
         const bx = X0 + dx - (big.w * BS * (stretch - 1)) / 2, by = BASE - 7 * bs;
-        big.letters.forEach((L) => L.g && items.push({ g: L.g, x: bx + L.x * BS * stretch, y: by, sx: BS * stretch, sy: bs, slant: 1, flash, a }));
+        big.letters.forEach((L) => L.g && items.push({ g: L.g, x: bx + L.x * BS * stretch, y: by - (L.g.rows.length - 7) * bs, sx: BS * stretch, sy: bs, slant: 1, flash, a }));
         const lx = X0 + dx + big.w * BS * stretch + 4;
-        lab.letters.forEach((L) => L.g && items.push({ g: L.g, x: lx + L.x * LS * stretch, y: BASE - 7 * LS, sx: LS * stretch, sy: LS, slant: 0.5, flash, a }));
+        lab.letters.forEach((L) => L.g && items.push({ g: L.g, x: lx + L.x * LS * stretch, y: BASE - 7 * LS - (L.g.rows.length - 7) * LS, sx: LS * stretch, sy: LS, slant: 0.5, flash, a }));
         return items;
       };
       if (moving && a > 0) {

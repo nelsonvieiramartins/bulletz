@@ -17,6 +17,7 @@ export const meta = {
     palette: ["#2a1608", "#6b3c10", "#b8701a", "#f0b42e", "#ffe27a", "#fff6cf", "#ffffff"],
     sparks: ["#fff3a6", "#ffe26b", "#ff8a2a", "#f2561d"],
     reach: 66,
+    star: 24,
     seed: 4,
   },
 };
@@ -120,7 +121,7 @@ export function create(o) {
       const q = t - OUT;
       if (q >= 0 && q < 0.4) {
         const g = ease.outBack(clamp(q / 0.04), 2.4) * (1 - smooth(0.08, 0.4, q)) * (1 + 0.12 * Math.sin(q * 70));
-        longStar(p, TX, TY, 24 * g, 1 - q / 0.4, C);
+        longStar(p, TX, TY, (o.star ?? 24) * g, 1 - q / 0.4, C);
       }
       if (q >= 0 && q < 0.2) {
         const k = q / 0.2, rx = 2 + 7 * ease.outCubic(k), ry = 4 + 12 * ease.outCubic(k);

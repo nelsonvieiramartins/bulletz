@@ -142,7 +142,12 @@ const enemyTypes = {
   patrol: { hp: 3, points: 150, interval: 2.25, speed: 86, reach: 225, shotSpeed: 125 },
   elite: { hp: 5, points: 300, interval: 1.45, speed: 102, reach: 250, shotSpeed: 150 },
   drone: { hp: 5, points: 250, interval: 2.1, speed: 32, reach: 280 },
-  heavyDrone: { hp: 8, points: 350, interval: 1.35, speed: 48, reach: 330, shotSpeed: 178, burstShots: 8, burstRate: .095 }
+  heavyDrone: { hp: 8, points: 350, interval: 1.35, speed: 48, reach: 330, shotSpeed: 178, burstShots: 8, burstRate: .095 },
+  // Fofão: ataque corpo a corpo. Corre até o Edu em qualquer distância, prepara o golpe de faca e dá a estocada.
+  fofao: { hp: 4, points: 250, speed: 120, strike: 34, windup: .42, slash: .22, recover: .12, cooldown: .55 },
+  // Chapolim Colorado: corpo a corpo com a marreta. Mais lento e resistente que o Fofão; levanta a marreta (aviso longo)
+  // e desce de uma vez. Ao bater no chão (hitAt) solta o abalo sísmico do pixelfx no ponto de impacto (impactX à frente) e o dano é essa onda: o anel cresce de 6 a 52 unidades em .45 s (quakeRing) e machuca quem ele alcança no chão.
+  chapolim: { hp: 6, points: 400, speed: 125, strike: 46, windup: .4, slash: .2, recover: .3, cooldown: .6, hitAt: .54, impactX: 36 }
 }
 const enemyFrames = {
   patrol: [80,72,40,70],
@@ -153,7 +158,17 @@ const enemyFrames = {
   heavyDrone: [60,60,30,40],
   droneDeath: [60,60,30,57],
   eliteDroneDeath: [60,60,30,57],
-  boss: [112,64,60,63]
+  boss: [112,64,60,63],
+  // Fofão (assets/fofao, em 2x: desenhado na metade do tamanho): [largura, altura, âncora x, pés y] de cada quadro, em px da folha
+  fofaoRun: [116,152,59,146],
+  fofaoAttack: [147,142,84,136],
+  fofaoAttack2: [148,144,84,138],
+  fofaoFall: [131,148,68,142],
+  // Chapolim (assets/chapolim, também em 2x)
+  chapolimRun: [132,158,66,152],
+  chapolimAttack: [167,154,87,148],
+  chapolimFall: [145,154,70,148],
+  chapolimJump: [140,143,71,137]
 }
 const enemyMuzzles = { patrol: [27,-55], drone: [8,0], heavyDrone: [25,3] }
 // A folha preta tem uma silhueta visualmente mais pesada; comprime só a largura para casar com o patrulheiro padrão.
@@ -174,10 +189,13 @@ const boss = { x: 6680, y: groundY, hp: bossHp, delay: .75, volley: 0 }
 
 function createEnemy({ x, type, min, max, y }) {
   const drone = type === 'drone' || type === 'heavyDrone'
-  return { x, origin: x, kind: drone ? 'drone' : 'patrol', type, elite: type === 'elite' || type === 'heavyDrone',
+  return { x, origin: x, kind: drone ? 'drone' : type === 'fofao' || type === 'chapolim' ? 'melee' : 'patrol', type, elite: type === 'elite' || type === 'heavyDrone',
     y, spawnY: y, min, max,
     hp: enemyTypes[type].hp, delay: drone ? 1.25 : 1.1+(x%7)*.14, face: -1, moving: false,
-    route: x % 3 === 0 ? 1 : -1, vx: 0, vy: 0, stride: 0, grounded: true, airTime: 0, landing: 0 }
+    route: x % 3 === 0 ? 1 : -1, vx: 0, vy: 0, stride: 0, grounded: true, airTime: 0, landing: 0,
+    attackAge: -1, attackKind: 0, struck: false, cooldown: 0, jumpWait: 0,
+    special: null, specialAge: 0, specialUses: 0, aliveTime: 0, ghostTimer: 0,
+    standOff: .4 + Math.random()*.35, paceDir: 1, paceTimer: 0, slot: Math.random() - .5 }
 }
 
 function populateEnemies(at) {
@@ -228,18 +246,22 @@ const explosionFrame = {
 const impactDuration = .12
 const flashDuration = .075
 const flashSprite = document.createElement('canvas')
-flashSprite.width = 88
-flashSprite.height = 72
+flashSprite.width = 200
+flashSprite.height = 200
 const flashCtx = flashSprite.getContext('2d')
 let camera = 0
 let elapsed = 0
 let idleTime = 0
 let playerFall = null
+let playerLevelY = 0   // altura do chão em que o Edu pisou por último; os Fofões se orientam por ela
 let last = 0
 let jumpPressed = false
 let respawnX = onTruck ? fase21.startX : 70
 let zoneIndex = 0
 let finish = false
+// Fase 2.1: a rua passa sozinha (roadPos anda com roadSpeed). No final a carreta freia até parar na porta do Vikings Pub (endSeq).
+let roadPos = 0, roadSpeed = onTruck ? fase21.speed : 0, wheelAngle = 0
+let endSeq = null, endGround = null
 let previewPlaying = true
 let previewSequence = 'run'
 let previewFrame = 0
@@ -432,10 +454,12 @@ function reset(all = true) {
     populateEnemies(respawnX)
     resetWaves()
     resetSuspension()
+    resetEnding()
   }
   invulnerability = .9
   enemyShots.length = 0
   Object.assign(player,{x:respawnX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false,mover:null})
+  playerLevelY = player.y
   camera = onTruck ? clamp(player.x - fase21.cameraLead, 0, fase21.cameraMax) : Math.max(0, player.x - 145)
   shots.length = 0
   impacts.length = 0
@@ -448,11 +472,15 @@ function reset(all = true) {
 }
 
 // Fase 2.1: ondas de inimigos. Cada onda só começa quando a anterior foi derrotada; os inimigos entram um a um pela borda da tela.
+const afterimages = []      // imagens que ficam para trás na investida especial do Fofão: { x, y, face, age }
+let fofaoSpecialReadyAt = 9 // quando o próximo especial pode começar (fofaoSpecial.firstAt, mais abaixo, no reinício)
 const waveState = { index: 0, pending: [], clearedAt: null }
 function resetWaves() {
   waveState.index = 0
   waveState.pending.length = 0
   waveState.clearedAt = null
+  afterimages.length = 0
+  fofaoSpecialReadyAt = elapsed + 9   // o 1º especial só depois de 9 s de fase (fofaoSpecial.firstAt)
   if (onTruck) progressText.textContent = 'ONDA 0 / ' + fase21.waves.length
 }
 resetWaves()
@@ -478,11 +506,15 @@ function spawnWaveEnemy({ type, level, side }) {
 }
 function updateWaves(dt) {
   const w = waveState
+  for (let i = afterimages.length - 1; i >= 0; i--) { afterimages[i].age += dt; if (afterimages[i].age > .3) afterimages.splice(i, 1) }
   // os inimigos acompanham o Edu pela carreta: soldados patrulham em volta dele e os drones voam por perto
   const [minX, maxX] = fase21.bounds
   for (const e of enemies) {
     if (e.hp <= 0) continue
-    if (e.kind === 'patrol') {
+    if (e.kind === 'melee') {   // o Fofão corre pela carreta toda atrás do Edu
+      e.min = -45
+      e.max = maxX - 6
+    } else if (e.kind === 'patrol') {
       // faixa larga em volta do Edu (mais larga que a tela, para quem entra pela borda não ser empurrado para dentro dela)
       e.min = clamp(player.x - 300, -45, maxX - 60)
       e.max = clamp(player.x + 300, 64, maxX - 6)
@@ -502,8 +534,7 @@ function updateWaves(dt) {
   const waves = fase21.waves
   if (w.index >= waves.length) {
     finish = true
-    announce(fase21.victory, 6)
-    sfx.play('victory')
+    startEnding()
     return
   }
   const wave = waves[w.index++]
@@ -513,13 +544,76 @@ function updateWaves(dt) {
   for (const spec of [...wave.spawns].sort((a, b) => a.t - b.t)) w.pending.push({ at: elapsed + 1.6 + spec.t, spec })
 }
 
+// Fase 2.1: final. A carreta freia (a rua desacelera) até parar com a porta do Vikings Pub; o Edu corre para a frente da carreta e
+// espera, depois desce pela frente, anda para fora da tela, aparece "ESTÁGIO CONCLUÍDO" e a tela fecha em cacos de vidro (shatter-wipe)
+// de volta para a tela inicial. Durante isso o Edu anda sozinho (endSeq.dir) e o resto da fase fica parado (finish).
+const ending = {
+  brake: 5.6,         // s para a carreta parar (a velocidade cai com (1 - t/brake)^2: percorre v0*brake/3)
+  stopX: 575,         // onde o Edu espera, na carreta (a câmera chega ao fim: 250)
+  settle: .9,         // s parado depois da freada, antes de descer
+  sidewalkY: 226,     // chão da calçada do pub, para onde ele desce
+  doorX: 563,         // centro da porta principal no desenho do pub (unidades desde a esquerda dele; tools/montar_pub.py)
+  pubBase: 201,       // y onde a base do pub (e a calçada dele) encosta: onde começa a calçada da rua padrão
+  doorOnScreen: 440,  // onde a porta fica na tela quando a carreta para (logo à frente do nariz da cabine, com a câmera no fim)
+  bannerAt: 2.7,      // s de faixa até a tela começar a fechar
+  wipeEnd: 2.75       // s de transição até voltar à tela inicial
+}
+function startEnding() {
+  const v0 = roadSpeed
+  endSeq = { phase: 'brake', t: 0, v0, dir: 0, free: false, roadEnd: roadPos + v0 * ending.brake / 3, wiped: false }
+  player.trigger = false
+}
+function resetEnding() {
+  roadPos = 0
+  roadSpeed = onTruck ? fase21.speed : 0
+  wheelAngle = 0
+  endSeq = null
+  if (endGround) { platforms.splice(platforms.indexOf(endGround), 1); endGround = null }
+}
+function updateEnding(dt) {
+  const s = endSeq
+  s.t += dt
+  if (s.phase === 'brake') {
+    const k = Math.min(1, s.t / ending.brake)
+    roadSpeed = s.v0 * (1 - k) * (1 - k)
+    s.dir = player.x < ending.stopX - 4 ? 1 : 0   // corre até a frente e fica parado
+    if (k >= 1) { roadSpeed = 0; s.phase = 'settle'; s.t = 0; suspension.v += 60 }   // um tranco ao parar
+  } else if (s.phase === 'settle') {
+    s.dir = player.x < ending.stopX - 4 ? 1 : 0
+    if (s.t >= ending.settle && s.dir === 0) {
+      s.phase = 'exit'; s.t = 0; s.free = true
+      endGround = [-600, ending.sidewalkY, 3000, true]   // a calçada, invisível: ele desce da carreta para ela
+      platforms.push(endGround)
+    }
+  } else if (s.phase === 'exit') {
+    s.dir = 1
+    if (player.x - camera > width + 30) { s.phase = 'banner'; s.t = 0; s.dir = 0; gameFx.banner(); sfx.play('victory') }
+  } else if (s.phase === 'banner') {
+    if (!s.wiped && s.t >= ending.bannerAt) { s.wiped = true; gameFx.startWipe() }
+    if (s.wiped && gameFx.wipeTime >= ending.wipeEnd) {
+      reset(true)       // volta tudo ao começo da fase e mostra a tela inicial
+      setMode('title')
+    }
+  }
+}
+// O pub entra pela direita junto com a rua e, quando a carreta para, a porta fica na frente da cabine.
+// Posição da câmera em que a borda direita do pub encosta na borda direita da tela
+function pubCameraEnd() {
+  return ending.doorOnScreen - ending.doorX + sprites.pub.width / pixelScale + fase21.cameraMax - width
+}
+function drawPub() {
+  const img = sprites.pub, w = img.width / pixelScale, h = img.height / pixelScale
+  const doorFinal = ending.doorOnScreen - ending.doorX                     // x do pub com a carreta parada e a câmera no fim
+  const x = Math.round(doorFinal + (endSeq.roadEnd + fase21.cameraMax) - (roadPos + camera))
+  if (x < width && x + w > 0) ctx.drawImage(img, x, ending.pubBase - h, w, h)
+}
 // Fase 2.1: amortecimento da carreta. Uma mola amortecida segura o corpo da carreta; de tempos em tempos um solavanco
 // (buraco na pista) dá um empurrão e ele balança até parar. Só o desenho se mexe (carreta, Edu, inimigos, tiros);
 // a lógica do jogo e o cenário ao fundo ficam parados.
 const suspension = { y: 0, v: 0, next: 2.2, offset: 0 }
 function updateSuspension(dt) {
   const s = fase21.suspension
-  suspension.next -= dt
+  suspension.next -= dt * Math.min(1, roadSpeed / fase21.speed)   // parada, a carreta não pega mais buracos
   if (suspension.next <= 0) {
     const [minGap, maxGap] = s.bumpEvery, [minKick, maxKick] = s.kick
     suspension.v += (minKick + Math.random() * (maxKick - minKick)) * (Math.random() < .7 ? 1 : -.6)   // mais afundando que subindo
@@ -848,10 +942,18 @@ function updatePaused(dt) {
   else resumeGame()
 }
 
+// Teste do final da 2.1: index.html?fase=2.1&fim pula as ondas e começa direto na freada até o Vikings Pub
+const testEnding = onTruck && new URLSearchParams(location.search).has('fim')
 function update(dt) {
   elapsed += dt
+  if (testEnding && !finish && !endSeq) { finish = true; startEnding() }
   updateMovers()
-  if (onTruck) updateSuspension(dt)
+  if (onTruck) {
+    if (endSeq) updateEnding(dt)
+    roadPos += roadSpeed * dt
+    wheelAngle += roadSpeed / fase21.speed * fase21.wheelSpin * dt
+    updateSuspension(dt)
+  }
   if (elapsed > noticeUntil) notice.hidden = true
   if (previewPlaying) {
     previewTime = (previewTime + dt * fps) % sequences[previewSequence].count
@@ -866,12 +968,13 @@ function update(dt) {
     if (playerFall.age < fallDuration) updatePlayerFall(dt)
     return
   }
-  if (lives === 0 || finish) return
-  const right = active('ArrowRight','KeyD')
-  const left = active('ArrowLeft','KeyA')
-  const direction = right || left ? Number(right) - Number(left) : pad.direction
-  const wantsCrouch = active('ArrowDown','KeyS') || pad.crouch
-  if (jumpPressed || pad.jump) player.buffer = 0.13
+  if (lives === 0 || (finish && !endSeq)) return
+  const scripted = !!endSeq   // no final da 2.1 o Edu anda sozinho
+  const right = !scripted && active('ArrowRight','KeyD')
+  const left = !scripted && active('ArrowLeft','KeyA')
+  const direction = scripted ? endSeq.dir : right || left ? Number(right) - Number(left) : pad.direction
+  const wantsCrouch = !scripted && (active('ArrowDown','KeyS') || pad.crouch)
+  if (!scripted && (jumpPressed || pad.jump)) player.buffer = 0.13
   jumpPressed = false
   player.buffer -= dt
   player.coyote = player.grounded ? 0.09 : player.coyote - dt
@@ -890,11 +993,12 @@ function update(dt) {
     player.y = player.mover.cy
   }
   const oldY = player.y
-  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,end)
+  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],endSeq && endSeq.free ? Infinity : fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,end)
   player.vy += 790 * dt
   player.y += player.vy * dt
   player.grounded = false
   landOnPlatform(player, oldY, 7, true)
+  if (player.grounded) playerLevelY = player.y
   if (player.y > 295) {
     loseLife()
     return
@@ -957,7 +1061,7 @@ function update(dt) {
     if (Math.random() < dt * 15) sparks.push({x:player.x-player.face*7,y:player.y-2,t:.19})
   } else if (player.grounded) player.phase = 0
   player.cooldown -= dt
-  player.trigger = active('KeyG') || pad.fire
+  player.trigger = !scripted && (active('KeyG') || pad.fire)
   if (!player.trigger) shotTick = 0
   if (player.trigger && player.cooldown <= 0) {
     player.cooldown = fireInterval
@@ -1009,7 +1113,8 @@ function update(dt) {
   }
   for (const spark of sparks) { spark.y -= dt * 18; spark.t -= dt }
   while (sparks.length && sparks[0].t <= 0) sparks.shift()
-  if (onTruck) camera += (clamp(player.x - fase21.cameraLead,0,fase21.cameraMax) - camera) * Math.min(1,dt * 6)   // a câmera segue o Edu pela carreta
+  // a câmera segue o Edu pela carreta; no final, depois que ele desce, segue até o fim do desenho do pub (e ele sai de tela)
+  if (onTruck) camera += (clamp(player.x - fase21.cameraLead,0,endSeq && endSeq.free ? pubCameraEnd() : fase21.cameraMax) - camera) * Math.min(1,dt * 6)
   else camera += (clamp(player.x - 154,0,end+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
   if (!onTruck && nextProgress !== progress) {
@@ -1176,6 +1281,257 @@ function updatePatrol(enemy, distance, config, dt) {
   }
 }
 
+// Ataque especial do Fofão (investida): agacha avisando, dispara pelo chão deixando imagens atrás, corta e acerta em cheio.
+// É raro de propósito: só depois de um tempo vivo, no máximo 2 vezes por Fofão e com um intervalo grande entre
+// os especiais de todos eles. Efeitos de corte e de golpe crítico do pixelfx (dash-strike).
+const fofaoSpecial = {
+  minAlive: 6,        // s vivo antes do primeiro especial
+  maxUses: 2,         // por Fofão
+  gap: 16,            // s mínimos entre dois especiais de quaisquer Fofões
+  firstAt: 9,         // s de partida antes de o primeiro especial de todos
+  chance: .35,        // por segundo, quando as condições estão certas
+  minDist: 80, maxDist: 240,
+  crouch: .6,         // aviso (pisca branco)
+  dashSpeed: 560, dashMax: .4,
+  recover: .75
+}
+function tryFofaoSpecial(enemy, distance, sameLevel, dt) {
+  const sp = fofaoSpecial
+  const far = Math.abs(distance)
+  if (enemy.type !== 'fofao' || enemy.specialUses >= sp.maxUses || enemy.aliveTime < sp.minAlive || elapsed < fofaoSpecialReadyAt) return false
+  if (!sameLevel || far < sp.minDist || far > sp.maxDist || Math.random() > sp.chance * dt) return false
+  enemy.special = 'crouch'
+  enemy.specialAge = 0
+  enemy.specialUses++
+  enemy.face = Math.sign(distance) || enemy.face
+  fofaoSpecialReadyAt = elapsed + sp.gap
+  sfx.play('bossShot', { dx: enemy.x - player.x })
+  return true
+}
+// Devolve true no quadro em que a investida acerta o Edu.
+function stepFofaoSpecial(enemy, distance, sameLevel, dt) {
+  const sp = fofaoSpecial
+  let struck = false
+  enemy.specialAge += dt
+  if (enemy.special === 'crouch') {
+    enemy.vx = 0
+    enemy.face = Math.sign(distance) || enemy.face
+    if (enemy.specialAge >= sp.crouch) { enemy.special = 'dash'; enemy.specialAge = 0; enemy.ghostTimer = 0 }
+  } else if (enemy.special === 'dash') {
+    enemy.vx = enemy.face * sp.dashSpeed
+    enemy.ghostTimer -= dt
+    if (enemy.ghostTimer <= 0) {
+      afterimages.push({ x: enemy.x, y: enemy.y, face: enemy.face, age: 0 })
+      enemy.ghostTimer = .03
+    }
+    const passed = Math.sign(player.x - enemy.x) !== enemy.face
+    if (sameLevel && Math.abs(distance) < 26 * charScale + 8) {
+      struck = true
+      gameFx.slash({ x: enemy.x + enemy.face * 6, floor: enemy.y, flip: enemy.face < 0 })
+      gameFx.crit({ x: player.x, floor: player.y, flip: enemy.face < 0, height: 28 * charScale })
+      sfx.play('heavyBlast', { dx: enemy.x - player.x })
+    }
+    if (struck || passed || enemy.specialAge >= sp.dashMax) { enemy.special = 'recover'; enemy.specialAge = 0; enemy.vx = 0 }
+  } else {
+    enemy.vx = -enemy.face * 25   // recuperando: ainda se mexe, recuando devagar
+    if (enemy.specialAge >= sp.recover) { enemy.special = null; enemy.cooldown = 1 }
+  }
+  return struck
+}
+function drawAfterimages(scroll) {
+  for (const g of afterimages) {
+    ctx.save()
+    ctx.globalAlpha = Math.max(0, 1 - g.age / .3) * .55
+    enemyFrame('fofaoRun', 0, g.x - scroll, g.y, g.face, false, 'rgba(120, 205, 255, .8)')
+    ctx.restore()
+  }
+}
+
+// Ataque especial aéreo do Chapolim (ground-pound): agacha, salta para fora da tela, some um instante (marca o chão onde o
+// Edu está) e despenca ali com a marreta. Ele troca de plataforma e golpeia a do Edu: o impacto solta o ground-slam do
+// pixelfx e as duas ondas que correm pelo chão são o dano (mesma curva do efeito: 7 -> reach em .6 s, outCubic).
+// Raro como o especial do Fofão: depois de um tempo vivo, no máximo 2 vezes por Chapolim e com intervalo entre todos.
+const chapolimLeap = { minAlive: 6, maxUses: 2, chance: .3, coil: .35, rise: .5, hang: .75, fall: .28, land: 1.0,
+  height: 330, reach: 90, jumpClear: 20 }
+const slamFront = (age) => 7 + (chapolimLeap.reach - 7) * (1 - Math.pow(1 - Math.min(1, Math.max(0, age - .015) / .6), 3))
+function tryChapolimLeap(enemy, dt) {
+  const L = chapolimLeap
+  if (enemy.type !== 'chapolim' || !enemy.grounded || enemy.specialUses >= L.maxUses || enemy.aliveTime < L.minAlive ||
+      elapsed < fofaoSpecialReadyAt || Math.random() > L.chance * dt) return false
+  enemy.special = 'coil'
+  enemy.specialAge = 0
+  enemy.specialUses++
+  enemy.vx = 0
+  enemy.face = Math.sign(player.x - enemy.x) || enemy.face
+  fofaoSpecialReadyAt = elapsed + fofaoSpecial.gap
+  sfx.play('bossShot', { dx: enemy.x - player.x })
+  return true
+}
+// Devolve true no quadro em que a onda alcança o Edu.
+function stepChapolimLeap(enemy, dt) {
+  const L = chapolimLeap
+  let struck = false
+  enemy.specialAge += dt
+  const age = enemy.specialAge
+  enemy.vx = 0
+  if (enemy.special === 'coil') {
+    enemy.face = Math.sign(player.x - enemy.x) || enemy.face
+    if (age >= L.coil) { enemy.special = 'rise'; enemy.specialAge = 0; enemy.baseY = enemy.y; enemy.vy = 0 }
+  } else if (enemy.special === 'rise') {
+    const k = Math.min(1, age / L.rise)
+    enemy.y = enemy.baseY - L.height * k * k   // sobe acelerando, até sair da tela por cima
+    if (age >= L.rise) {
+      // fixa o alvo: o ponto da plataforma do Edu onde ele está agora (a marca no chão avisa)
+      enemy.special = 'hang'; enemy.specialAge = 0
+      enemy.landX = clamp(player.x, enemy.min, enemy.max)
+      enemy.landY = playerLevelY
+    }
+  } else if (enemy.special === 'hang') {
+    enemy.x = enemy.landX
+    enemy.y = enemy.landY - L.height
+    if (age >= L.hang) { enemy.special = 'fall'; enemy.specialAge = 0 }
+  } else if (enemy.special === 'fall') {
+    const k = Math.min(1, age / L.fall)
+    enemy.x = enemy.landX
+    enemy.y = enemy.landY - L.height * (1 - k * k)
+    if (age >= L.fall) {
+      enemy.special = 'land'; enemy.specialAge = 0
+      enemy.x = enemy.landX; enemy.y = enemy.landY; enemy.vy = 0; enemy.grounded = true; enemy.struck = false
+      gameFx.slam({ x: enemy.x, floor: enemy.y, reach: L.reach })
+      sfx.play('heavyBlast', { dx: enemy.x - player.x })
+    }
+  } else {
+    // pousado: as ondas correm pelo chão; quem está alto o bastante passa por cima
+    if (!enemy.struck && age < .8 && Math.abs(player.y - enemy.y) < 40 && player.y > enemy.y - L.jumpClear &&
+        Math.abs(player.x - enemy.x) < slamFront(age)) { enemy.struck = true; struck = true }
+    if (age >= L.land) { enemy.special = null; enemy.cooldown = 1 }
+  }
+  return struck
+}
+// Onda do abalo sísmico do Chapolim (mesma conta do anel do heavy-cleave: 6 + 46*outCubic(t/.45), em unidades do mundo)
+const quakeRing = { time: .45, jumpClear: 16, radius: (age) => 6 + 46 * (1 - Math.pow(1 - Math.min(1, age/.45), 3)) }
+// Rota do Fofão até o andar do Edu: devolve { x, jump } (x = para onde andar, jump = pular agora) ou null se já
+// estão no mesmo andar. Edu mais alto: vai até a plataforma que o aproxima mais do andar dele e pula nela.
+// Edu mais baixo: anda até a ponta da plataforma em que está e cai.
+function meleeNav(enemy) {
+  const diff = playerLevelY - enemy.y
+  if (Math.abs(diff) < 30) return null
+  if (diff < 0) {
+    let best = null
+    for (const [x, y, w] of platforms) {
+      if (y >= enemy.y - 8 || enemy.y - y > 52) continue
+      if (!best || Math.abs(y - playerLevelY) < Math.abs(best.y - playerLevelY)) best = { x, y, w }
+    }
+    if (!best) return null
+    const inside = enemy.x > best.x + 6 && enemy.x < best.x + best.w - 6
+    return { x: clamp(enemy.x, best.x + 10, best.x + best.w - 10), jump: inside }
+  }
+  const here = platforms.find(([x, y, w]) => Math.abs(y - enemy.y) < 2 && enemy.x >= x - 6 && enemy.x <= x + w + 6)   // folga: na ponta ele ainda se apoia pelo raio do corpo
+  if (!here) return null
+  const edges = [here[0], here[0] + here[2]].filter(e => e > 0 && e < 700)
+  if (!edges.length) return null
+  const edge = edges.reduce((a, b) => Math.abs(b - enemy.x) < Math.abs(a - enemy.x) ? b : a)
+  return { x: edge + (Math.sign(edge - enemy.x) || 1) * 14, jump: false }
+}
+
+// Inimigo corpo a corpo (Fofão). Devolve true no quadro em que a faca acerta o Edu.
+function updateMelee(enemy, distance, config, dt) {
+  const dir = Math.sign(distance) || enemy.face
+  const sameLevel = Math.abs(player.y - enemy.y) < 40
+  const reach = (config.strike + 8) * charScale
+  enemy.cooldown = Math.max(0, enemy.cooldown - dt)
+  enemy.jumpWait = Math.max(0, enemy.jumpWait - dt)
+  let struck = false
+  enemy.aliveTime += dt
+  if (enemy.special) {
+    struck = enemy.type === 'chapolim' ? stepChapolimLeap(enemy, dt) : stepFofaoSpecial(enemy, distance, sameLevel, dt)
+  } else if (enemy.attackAge >= 0) {
+    // golpe: prepara (a faca volta), estoca, recupera; parado enquanto ataca
+    const before = enemy.attackAge
+    enemy.attackAge += dt
+    // vulto da faca no instante da estocada (o efeito dura uns .3 s, então acompanha o quadro de estocada)
+    if (enemy.type === 'fofao' && before < config.windup && enemy.attackAge >= config.windup)
+      gameFx.stab({ x: enemy.x, floor: enemy.y, flip: enemy.face < 0, reach: 16 * charScale, lift: 17 * charScale })
+    // nunca fica parado: avança devagar no preparo, dá um bote na estocada e recua um pouco depois
+    const creep = enemy.attackAge < config.windup ? enemy.face*30 : enemy.attackAge < config.windup + config.slash ? enemy.face*110 : -enemy.face*35
+    enemy.vx += clamp(creep - enemy.vx, -1400*dt, 1400*dt)
+    const slashFrom = config.hitAt ?? config.windup, slashTo = config.windup + config.slash
+    if (config.impactX) {
+      // marreta do Chapolim: no impacto sai o abalo sísmico e a onda corre pelo chão; só escapa quem está pulando alto
+      const since = enemy.attackAge - slashFrom
+      const hitX = enemy.x + enemy.face * config.impactX * charScale
+      if (since >= 0 && !enemy.quaked) {
+        enemy.quaked = true
+        gameFx.quake({ x: hitX, floor: enemy.y, flip: enemy.face < 0 })
+        sfx.play('heavyBlast', { dx: enemy.x - player.x })
+      }
+      if (enemy.quaked && !enemy.struck && since < quakeRing.time &&
+          sameLevel && player.y > enemy.y - quakeRing.jumpClear && Math.abs(player.x - hitX) < quakeRing.radius(since)) {
+        enemy.struck = true
+        struck = true
+      }
+    } else if (!enemy.struck && enemy.attackAge >= slashFrom && enemy.attackAge < slashTo &&
+        sameLevel && Math.abs(distance) < reach && Math.sign(distance) === enemy.face) {
+      enemy.struck = true
+      struck = true
+    }
+    if (enemy.attackAge >= slashTo + config.recover) { enemy.attackAge = -1; enemy.cooldown = config.cooldown }
+  } else if (enemy.grounded) {
+    enemy.face = dir
+    // sempre em movimento: avança até o Edu; perto dele não para, anda de um lado para o outro (e recua se colar demais)
+    const far = Math.abs(distance)
+    enemy.paceTimer -= dt
+    if (enemy.paceTimer <= 0) { enemy.paceDir = Math.random() < .5 ? 1 : -1; enemy.paceTimer = .6 + Math.random()*.6 }
+    let target = dir*config.speed
+    if (far < reach*enemy.standOff) target = (far < reach*.3 ? -dir : far > reach*.8 ? dir : enemy.paceDir) * config.speed * .55
+    // em outro andar não fica rondando embaixo/em cima do Edu: segue a rota até o andar dele
+    const nav = meleeNav(enemy)
+    if (nav) {
+      const toNav = nav.x - enemy.x
+      target = Math.abs(toNav) > 4 ? Math.sign(toNav) * config.speed : dir * 30
+      if (nav.jump && enemy.jumpWait <= 0) { enemy.vy = -292; enemy.jumpWait = .8 }
+    }
+    // sem empilhar: cada Fofão se afasta de quem está colado nele (podem se cruzar, mas não ficam no mesmo ponto)
+    let crowd = 0
+    for (const o of enemies) {
+      if (o === enemy || o.hp <= 0 || o.kind !== 'melee' || Math.abs(o.y - enemy.y) > 24) continue
+      const d = enemy.x - o.x
+      if (Math.abs(d) < 36) crowd += (Math.sign(d) || Math.sign(enemy.slot) || 1) * (36 - Math.abs(d)) / 36
+    }
+    target += crowd * (nav ? 20 : 130)   // na rota quase não se empurram: senão travam na ponta da plataforma, empurrando um ao outro
+    if (Math.abs(target) < 35) target = 35 * (Math.sign(target) || enemy.paceDir)   // nunca fica parado
+    enemy.vx += clamp(target - enemy.vx, -1100*dt, 1100*dt)
+    if (tryFofaoSpecial(enemy, distance, sameLevel, dt) || tryChapolimLeap(enemy, dt)) {
+      // investida especial (rara): ver stepFofaoSpecial
+    } else if (sameLevel && Math.abs(distance) < reach*.8 && enemy.cooldown <= 0) {
+      enemy.attackAge = 0
+      enemy.struck = false; enemy.quaked = false
+      enemy.attackKind = Math.random() < .5 ? 0 : 1   // dois golpes: estocada reta ou facada levantada
+    }
+  }
+  if (enemy.special === 'rise' || enemy.special === 'hang' || enemy.special === 'fall') return struck   // no ar, controlado pelo especial
+  const oldX = enemy.x
+  const oldY = enemy.y
+  const wasGrounded = enemy.grounded
+  enemy.landing = Math.max(0, enemy.landing - dt)
+  enemy.x = clamp(enemy.x + enemy.vx*dt, enemy.min, enemy.max)
+  enemy.vy += 790*dt
+  enemy.y += enemy.vy*dt
+  enemy.grounded = false
+  landOnPlatform(enemy, oldY, 4)
+  if (enemy.grounded) enemy.stride = (enemy.stride + Math.abs(enemy.x - oldX)) % 64
+  if (!wasGrounded && enemy.grounded) enemy.landing = .1
+  enemy.airTime = enemy.grounded ? 0 : enemy.airTime + dt
+  if (enemy.y > height + 45) {
+    enemy.x = enemy.origin
+    enemy.y = enemy.spawnY
+    enemy.vx = 0
+    enemy.vy = 0
+    enemy.grounded = true
+  }
+  return struck
+}
+
 function updatePatrolFall(enemy, dt) {
   enemy.fallAge += dt
   if (enemy.grounded) return
@@ -1252,15 +1608,17 @@ function updateCombat(dt) {
     enemy.hitKick = (enemy.hitKick || 0) * Math.max(0,1-dt*15)
     enemy.hitKickY = (enemy.hitKickY || 0) * Math.max(0,1-dt*18)
     if (enemy.hp <= 0) {
-      if (enemy.kind === 'patrol' && enemy.fallAge < 1.2) updatePatrolFall(enemy, dt)
+      if ((enemy.kind === 'patrol' || enemy.kind === 'melee') && enemy.fallAge < 1.2) updatePatrolFall(enemy, dt)
       else if (enemy.kind === 'drone') updateDroneFall(enemy,dt)
       continue
     }
     const distance = player.x - enemy.x
     const config = enemyTypes[enemy.type]
-    if (enemy.kind === 'patrol') {
-      updatePatrol(enemy,distance,config,dt)
-      if (Math.abs(player.x-enemy.x) < 15*charScale && player.y > enemy.y-56*charScale && playerTop < enemy.y && hitPlayer()) return
+    if (enemy.kind === 'patrol' || enemy.kind === 'melee') {
+      const struck = enemy.kind === 'melee' ? updateMelee(enemy,distance,config,dt) : (updatePatrol(enemy,distance,config,dt), false)
+      if (struck && hitPlayer()) return
+      // encostar mata nos soldados; o Fofão só machuca com a faca (golpes e investida): sem dano de contato
+      if (enemy.kind === 'patrol' && Math.abs(player.x-enemy.x) < 15*charScale && player.y > enemy.y-56*charScale && playerTop < enemy.y && hitPlayer()) return
       continue
     }
     const eliteDrone = enemy.type === 'heavyDrone'
@@ -1337,8 +1695,9 @@ function updateCombat(dt) {
           sfx.play('bossDown')
         } else {
           score += enemyTypes[target.type].points
-          if (target.kind === 'patrol') {
+          if (target.kind === 'patrol' || target.kind === 'melee') {
             target.fallAge = 0
+            target.attackAge = -1
             playSoldierDeathSound(target.x - player.x)
           }
           else {
@@ -1429,8 +1788,9 @@ function enemyFrame(sheet, frame, x, y, face, hitFlash = false, tint = null) {
   const widthScale = sheet === 'elite' || sheet === 'eliteFall' ? eliteWidthScale : 1
   const spriteScale = sheet === 'drone' ? standardDroneScale : 1
   const droneFacing = sheet === 'heavyDrone' || sheet === 'eliteDroneDeath'
-  ctx.scale((droneFacing ? face : -face) * widthScale * spriteScale * charScale,spriteScale * charScale)
-  const columns = sheet === 'droneDeath' || sheet === 'eliteDroneDeath' ? 6 : sheet === 'patrol' || sheet === 'patrolFall' || sheet === 'elite' || sheet === 'eliteFall' ? 4 : 3
+  const sheetScale = sheet.startsWith('fofao') || sheet.startsWith('chapolim') ? .5 : 1   // as folhas do Fofão estão em 2x
+  ctx.scale((droneFacing ? face : -face) * widthScale * spriteScale * charScale * sheetScale,spriteScale * charScale * sheetScale)
+  const columns = sheet === 'fofaoFall' || sheet === 'chapolimFall' || sheet === 'chapolimJump' ? 5 : sheet.startsWith('fofao') || sheet.startsWith('chapolim') ? 4 : sheet === 'droneDeath' || sheet === 'eliteDroneDeath' ? 6 : sheet === 'patrol' || sheet === 'patrolFall' || sheet === 'elite' || sheet === 'eliteFall' ? 4 : 3
   const sx = (frame%columns)*w
   const sy = Math.floor(frame/columns)*h
   // O último quadro dos drones tinha fumaça estática no topo; recorta só a sucata.
@@ -1496,12 +1856,33 @@ function drawDroneWreckSmoke(enemy,x,y) {
 }
 
 function drawEnemies(scroll) {
+  drawAfterimages(scroll)
+  // marca do pouso do Chapolim: elipse que pisca no chão do Edu enquanto ele está lá em cima
+  for (const e of enemies) {
+    if (e.hp <= 0 || (e.special !== 'hang' && e.special !== 'fall')) continue
+    const k = e.special === 'fall' ? 1 : e.specialAge / chapolimLeap.hang
+    const pulse = Math.floor(elapsed * (8 + 14 * k)) % 2 ? 1 : .55
+    ctx.save()
+    ctx.globalAlpha = (.25 + .35 * k) * pulse
+    ctx.fillStyle = '#ff3b2e'
+    ctx.beginPath()
+    ctx.ellipse(Math.round(e.landX - scroll), Math.round(e.landY) + 1, 30, 4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = Math.min(1, .5 + .5 * k) * pulse
+    ctx.strokeStyle = '#ffd24a'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+  }
   for (const enemy of enemies) {
     const x = enemy.x-scroll+(enemy.hitKick || 0)
     const y = enemy.y+(enemy.hitKickY || 0)
     if (x < -90 || x > width+90) continue
     if (enemy.hp <= 0) {
-      if (enemy.kind === 'patrol' && enemy.fallAge < 1.2) {
+      if (enemy.kind === 'melee' && enemy.fallAge < 1.2) {   // some junto com o tempo de queda, como o corpo dos soldados
+        // queda do Fofão: derruba para trás (5 quadros); fica um instante no chão
+        enemyFrame(enemy.type === 'chapolim' ? 'chapolimFall' : 'fofaoFall', Math.min(enemy.grounded ? 4 : 2, Math.floor(enemy.fallAge/.11)), x, enemy.y, enemy.face, elapsed < enemy.flashUntil)
+      } else if (enemy.kind === 'patrol' && enemy.fallAge < 1.2) {
         const frame = Math.min(enemy.grounded ? 3 : 2, Math.floor(enemy.fallAge/.095))
         enemyFrame(enemy.type === 'elite' ? 'eliteFall' : 'patrolFall', frame, x, enemy.y, enemy.face, elapsed < enemy.flashUntil)
       } else if (enemy.kind === 'drone' && enemy.y < height+70) {
@@ -1511,6 +1892,64 @@ function drawEnemies(scroll) {
         drawDroneDeathFlash(x,y,enemy.deathAge)
         if (frame === 5) drawDroneWreckSmoke(enemy,x,y)
         enemyFrame(enemy.type === 'heavyDrone' ? 'eliteDroneDeath' : 'droneDeath',frame,x,y,enemy.face)
+      }
+      continue
+    }
+    if (enemy.kind === 'melee') {
+      const config = enemyTypes[enemy.type]
+      if (enemy.type === 'chapolim') {
+        const flash = elapsed < enemy.flashUntil
+        if (enemy.special) {   // 0 agacha; 1-4 sobe; (fora da tela); 5-8 despenca; 9 impacto
+          const k = enemy.special === 'rise' ? Math.min(.99, enemy.specialAge / chapolimLeap.rise) : enemy.special === 'fall' ? Math.min(.99, enemy.specialAge / chapolimLeap.fall) : 0
+          if (enemy.special === 'coil') enemyFrame('chapolimJump', 0, x, y, enemy.face, flash)
+          else if (enemy.special === 'rise') enemyFrame('chapolimJump', 1 + Math.floor(k * 4), x, y, enemy.face, flash)
+          else if (enemy.special === 'fall') enemyFrame('chapolimJump', 5 + Math.floor(k * 4), x, y, enemy.face, flash)
+          else if (enemy.special === 'land') enemyFrame('chapolimJump', 9, x, y, enemy.face, flash)
+          continue
+        }
+        if (enemy.attackAge >= 0) {   // 0-3: marreta sobe; 4-5: desce; 6: impacto; 7: volta
+          const age = enemy.attackAge, slashEnd = config.windup + config.slash
+          const frame = age < config.windup ? Math.floor(age/config.windup*4)
+            : age < config.windup + config.slash*.35 ? 4 : age < config.windup + config.slash*.7 ? 5
+            : age < slashEnd + config.recover*.4 ? 6 : 7
+          enemyFrame('chapolimAttack', Math.min(7, frame), x, y, enemy.face, flash)
+        } else if (enemy.grounded && Math.abs(enemy.vx) < 3) {
+          enemyFrame('chapolimAttack', Math.floor(elapsed*2.5 + enemy.origin) & 1, x, y, enemy.face, flash)
+        } else {
+          const frame = !enemy.grounded ? (enemy.vy < 0 ? 2 : 0) : Math.floor(enemy.stride/8) % 8
+          enemyFrame('chapolimRun', frame, x, y, enemy.face, flash)
+        }
+        continue
+      }
+      if (enemy.special) {   // investida: agachado piscando (aviso), corrida esticada, recuperação em guarda
+        if (enemy.special === 'crouch') enemyFrame('fofaoRun', 7, x, y, enemy.face, false, Math.floor(elapsed*14) % 2 ? 'rgba(255, 255, 255, .6)' : null)
+        else if (enemy.special === 'dash') enemyFrame('fofaoRun', 0, x, y, enemy.face)
+        else enemyFrame('fofaoAttack', 3, x, y, enemy.face, elapsed < enemy.flashUntil)
+        continue
+      }
+      if (enemy.attackAge >= 0) {
+        const age = enemy.attackAge
+        const slashEnd = config.windup + config.slash
+        let sheet, frame
+        if (enemy.attackKind === 1) {   // golpe 2: guarda (0-1), faca levantada (2-3), estocada (4-5), volta (6-7)
+          sheet = 'fofaoAttack2'
+          frame = age < config.windup ? Math.floor(age/config.windup*4)
+            : age < slashEnd ? (age < config.windup + config.slash*.5 ? 4 : 5)
+            : age < slashEnd + config.recover*.5 ? 6 : 7
+        } else {                        // golpe 1: faca atravessada (2-5), estocada (6), faca esticada (7)
+          sheet = 'fofaoAttack'
+          frame = age < config.windup ? 2 + Math.floor(age/config.windup*4)
+            : age < config.windup + config.slash*.5 ? 6 : 7
+        }
+        enemyFrame(sheet, Math.min(7, frame), x, y, enemy.face, elapsed < enemy.flashUntil)
+      } else {
+        if (enemy.grounded && Math.abs(enemy.vx) < 3) {
+          // parado: guarda de luta com a faca à frente (quadros 3 e 4 do golpe 1, que se alternam devagar como um respirar)
+          enemyFrame('fofaoAttack', 3 + (Math.floor(elapsed*2.5 + enemy.origin) & 1), x, y, enemy.face, elapsed < enemy.flashUntil)
+        } else {
+          const frame = !enemy.grounded ? (enemy.vy < 0 ? 2 : 0) : Math.floor(enemy.stride/8) % 8
+          enemyFrame('fofaoRun', frame, x, y, enemy.face, elapsed < enemy.flashUntil)
+        }
       }
       continue
     }
@@ -1567,6 +2006,10 @@ function render() {
   ctx.save()
   ctx.scale(pixelScale,pixelScale)
   renderWorld()
+  if (endSeq && endSeq.wiped) {   // a tela fecha: vidro por cima; quando ele estoura, por baixo só há escuro
+    if (gameFx.wipeTime > 1.5) { ctx.fillStyle = '#050408'; ctx.fillRect(0,0,width,height) }
+    gameFx.drawWipe(ctx,width,height)
+  }
   ctx.restore()
   sample.clearRect(0,0,preview.width,preview.height)
   if (heroSheets.has(previewSequence)) heroAtlas(sample,previewSequence,previewFrame,46,74,.46)
@@ -1736,10 +2179,11 @@ const stage2Props = stageData.props
 function drawStage2Background() {
   for (const { sheets, factor, y } of stage2Layers) {
     const w = sprites[sheets[0]].width/pixelScale, h = sprites[sheets[0]].height/pixelScale
-    const offset = Math.round((onTruck ? elapsed*fase21.speed + camera : camera)*factor)   // na 2.1 a rua corre sozinha e ainda anda com a câmera
+    const offset = Math.round((onTruck ? roadPos + camera : camera)*factor)   // na 2.1 a rua corre sozinha e ainda anda com a câmera
     for (let i = Math.floor(offset/w), x = i*w-offset; x < width; i++, x += w)
       ctx.drawImage(sprites[sheets[i%sheets.length]],x,y,w,h)
   }
+  if (onTruck && endSeq) drawPub()
   if (onTruck) {   // daqui em diante tudo balança com a carreta; só o cenário ao fundo fica parado
     ctx.save()
     ctx.translate(0,suspension.offset)
@@ -1764,7 +2208,7 @@ function drawTruckWheels() {
   const truck = stage2Props.find(p => p.sheet === 'truck')
   const h = sprites.truck.height / pixelScale
   const left = Math.round(truck.x - camera * truck.factor), top = truck.y - h
-  const angle = elapsed * fase21.wheelSpin
+  const angle = wheelAngle
   fase21.wheels.forEach((wheel, i) => {
     const image = sprites['wheel' + (i + 1)]
     const half = wheel.size / pixelScale / 2
@@ -1902,6 +2346,10 @@ Promise.all([
     loadImage('street2','assets/fase2/rua-t9-continua.webp'),
     loadImage('truck','assets/fase2/carreta-furacao.webp'),
     ...fase2.carSheets.map(([sheet, file]) => loadImage(sheet,'assets/fase2/carros/' + file)),
+    ...(onTruck ? [loadImage('pub','assets/fase2/vikings-pub.webp')] : []),
+    ...(onTruck ? [loadImage('fofaoRun','assets/fofao/corrida.png'), loadImage('fofaoAttack','assets/fofao/ataque.png'), loadImage('fofaoAttack2','assets/fofao/ataque2.png'),
+      loadImage('fofaoFall','assets/fofao/queda.png'),
+      loadImage('chapolimRun','assets/chapolim/corrida.png'), loadImage('chapolimAttack','assets/chapolim/ataque.png'), loadImage('chapolimFall','assets/chapolim/queda.png'), loadImage('chapolimJump','assets/chapolim/salto.png')] : []),
     ...(onTruck ? fase21.wheels.map((wheel, i) => loadImage('wheel' + (i + 1),'assets/fase2/rodas/' + wheel.file)) : [])
   ] : [loadImage('bg','assets/cidade.webp')]),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
@@ -1922,6 +2370,8 @@ Promise.all([
     window.bulletz = {
       player, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms, waveState, suspension,
       get finish() { return finish },
+      get endSeq() { return endSeq },
+      startEnding() { finish = true; startEnding() },
       get camera() { return camera },
       get lives() { return lives }, set lives(v) { lives = v },
       get god() { return invulnerability > 1e5 }, set god(v) { invulnerability = v ? 1e9 : 0 },

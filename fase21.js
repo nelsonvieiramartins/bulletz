@@ -1,4 +1,4 @@
-// Fase 2.1 · Em cima da Carreta Furação em movimento (abre com index.html?fase=2.1).
+// Fase 2.1 · Em cima da Carreta Furação em movimento (Fofões e Chapolins, sem drones) (abre com index.html?fase=2.1).
 // O Edu anda pela carreta inteira e a câmera o acompanha até a traseira, enquanto a rua e o céu passam rápido atrás.
 // Os inimigos chegam em ondas, entrando por trás da carreta (soldados nos andares, drones pelos dois lados da tela).
 // Mesmo formato dos dados de fase2.js, mais as ondas. Os andares são os mesmos medidos na carreta da Fase 2.
@@ -23,12 +23,12 @@ const bounds = [22, 660]             // onde o Edu pode andar: do fundo da trase
 const S = (type, lvl, t = 0) => ({ type, level: lvl, side: 'left', t })
 const D = (type, y, side, t = 0) => ({ type, level: y, side, t })
 const waves = [
-  { name: 'ONDA 1', spawns: [S('patrol','low',0), S('patrol','low',1.6), S('patrol','low',3.2)] },
-  { name: 'ONDA 2', spawns: [S('patrol','low',0), S('patrol','upper',1), S('patrol','low',2.4), D('drone',150,'right',3)] },
-  { name: 'ONDA 3', spawns: [S('elite','low',0), S('patrol','upper',1.2), S('patrol','roof',2.2), D('drone',130,'left',3), D('drone',160,'right',4)] },
-  { name: 'ONDA 4', spawns: [S('patrol','roof',0), S('patrol','upper',.8), S('elite','low',1.8), S('patrol','upper',3), D('drone',140,'right',2.4), D('drone',110,'left',3.6)] },
-  { name: 'ONDA 5', spawns: [S('elite','upper',0), S('elite','low',1.4), D('heavyDrone',130,'right',2), D('heavyDrone',150,'left',3.4), S('patrol','roof',3)] },
-  { name: 'ONDA FINAL', spawns: [S('elite','low',0), S('elite','upper',.8), S('elite','roof',1.6), S('patrol','low',2.6), S('patrol','upper',3.4), D('heavyDrone',120,'right',1.6), D('heavyDrone',150,'left',3.2), D('drone',100,'right',4.4)] }
+  { name: 'ONDA 1', spawns: [S('fofao','low',0), S('fofao','low',1.6), S('chapolim','low',3.2)] },
+  { name: 'ONDA 2', spawns: [S('fofao','low',0), S('chapolim','upper',1), S('fofao','low',2.4), S('fofao','low',4.5)] },
+  { name: 'ONDA 3', spawns: [S('chapolim','low',0), S('fofao','low',1), S('fofao','upper',1.8), S('chapolim','roof',2.6), S('fofao','upper',5)] },
+  { name: 'ONDA 4', spawns: [S('fofao','roof',0), S('chapolim','low',.6), S('fofao','upper',1.2), S('fofao','low',2.2), S('chapolim','upper',3.2)] },
+  { name: 'ONDA 5', spawns: [S('chapolim','upper',0), S('fofao','low',.8), S('chapolim','low',1.6), S('fofao','upper',2.8), S('fofao','roof',3.4)] },
+  { name: 'ONDA FINAL', spawns: [S('chapolim','low',0), S('fofao','upper',.8), S('fofao','roof',1.6), S('chapolim','low',2.2), S('fofao','upper',3), S('fofao','low',3.8), S('chapolim','roof',4.6)] }
 ]
 
 export const fase21 = {

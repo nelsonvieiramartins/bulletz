@@ -6,3 +6,6 @@ Amostras de todos os efeitos: efeitos.html na raiz do projeto.
 Modificação local: src/fx/projectiles/muzzle-smg.js ganhou a opção casingFloor (chão dos cartuchos), usada pelo BULLETZ.
 
 - src/fx/projectiles/muzzle-smg.js: nova opção `scale` (padrão 1) que reduz o tamanho do clarão; usada na Fase 2.1, com personagens 10% menores.
+- src/fx/melee/thrust.js: nova opção `star` (padrão 24) com o tamanho da estrela da ponta; usada no vulto da faca do Fofão.
+- src/fx/melee/heavy-cleave.js: nova opção `slamOnly` (padrão false): só a pancada no chão, centrada no ponto dado; usada na marreta do Chapolim.
+- src/fx/ui/combo-counter.js: novas opções `text` (palavra grande no lugar do "x5") e `hold` (tempo parado antes de sair), mais as letras Á e Í; usado em "ESTÁGIO CONCLUÍDO".
