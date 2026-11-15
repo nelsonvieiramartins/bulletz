@@ -720,6 +720,13 @@ function showFullscreenState() {
 }
 
 select('#start').onclick = startGame
+// iPhone/iPod: o Safari não tem API de tela cheia; só abrindo pelo ícone da Tela de Início (modo app) o jogo ocupa a tela toda
+{
+  const iphone = /iPhone|iPod/.test(navigator.userAgent)
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches
+  if (!document.documentElement.requestFullscreen) fullscreenToggle.hidden = true
+  if (iphone && !standalone) select('#ios-hint').hidden = false
+}
 select('#resume').onclick = resumeGame
 select('#touch-menu').onclick = openMenu
 fullscreenToggle.onclick = () => {

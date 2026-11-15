@@ -2,11 +2,17 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BULLETZ">
 <meta name="theme-color" content="#0e081a">
 <title>BULLETZ — Divorced Dad Rock</title>
-<link rel="stylesheet" href="style.css?v=21">
-<script type="module" src="game.js?v=131"></script>
+<link rel="stylesheet" href="style.css?v=22">
+<script type="module" src="game.js?v=132"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -55,6 +61,7 @@
         <a href="index.html?fase=2.1&fim">Final 2.1</a>
       </nav>
       <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
+      <p id="ios-hint" class="title-hint ios-hint" hidden>TELA CHEIA NO iPHONE: TOQUE EM COMPARTILHAR <span aria-hidden="true">⎙</span> E EM “ADICIONAR À TELA DE INÍCIO”</p>
     </section>
 
     <section id="gameover" class="overlay gameover" aria-label="Fim de jogo" hidden>
