@@ -1207,18 +1207,48 @@ function hitPlayer() {
   return true
 }
 
-// Fim de jogo: escurece a cena e mostra o título animado com o botão de reiniciar (ele fica ativo quando aparece)
+// Fim de jogo: escurece a cena e mostra o título animado. São 3 continues por partida (guardados entre as fases): CONTINUAR volta
+// ao INÍCIO da fase atual (não ao checkpoint) com as vidas cheias; REINICIAR JOGO começa tudo de novo na Fase 1. Sem continues,
+// só resta voltar ao início do jogo (tela inicial).
+const maxContinues = 3
 const gameOverScreen = select('#gameover')
-const gameOverButton = select('#gameover-restart')
+const continueButton = select('#gameover-continue')
+const restartButton = select('#gameover-restart')
+function continuesLeft() {
+  try { const v = sessionStorage.getItem('bulletz.continues'); return v === null ? maxContinues : Math.max(0, Number(v) || 0) } catch { return maxContinues }
+}
+function saveContinues(n) { try { sessionStorage.setItem('bulletz.continues', String(n)) } catch {} }
 function showGameOver() {
+  const left = continuesLeft()
+  continueButton.hidden = left === 0
+  continueButton.textContent = 'CONTINUAR · ' + left
+  restartButton.textContent = left === 0 ? 'VOLTAR AO INÍCIO' : 'REINICIAR JOGO'
   gameOverScreen.classList.remove('ready')
   gameOverScreen.hidden = false
   const title = gameOverScreen.querySelector('.gameover-title')
   title.style.animation = 'none'; void title.offsetWidth; title.style.animation = ''   // recomeça a animação
-  setTimeout(() => { gameOverScreen.classList.add('ready'); if (!gameOverScreen.hidden) gameOverButton.focus() }, 1500)
+  setTimeout(() => {
+    gameOverScreen.classList.add('ready')
+    if (!gameOverScreen.hidden) (left > 0 ? continueButton : restartButton).focus()
+  }, 1500)
 }
 function hideGameOver() { gameOverScreen.hidden = true; gameOverScreen.classList.remove('ready') }
-gameOverButton.onclick = () => { reset(true); game.focus() }
+continueButton.onclick = () => {
+  saveContinues(continuesLeft() - 1)
+  reset(true)
+  game.focus()
+}
+restartButton.onclick = () => {
+  const noContinues = continuesLeft() === 0
+  try {
+    sessionStorage.removeItem('bulletz.continues')
+    if (!noContinues) sessionStorage.setItem('bulletz.autostart', '1')   // reiniciar: já começa jogando; sem continues: tela inicial
+  } catch {}
+  const params = new URLSearchParams(location.search)
+  params.delete('fase'); params.delete('fim')
+  const query = params.toString()
+  location.href = location.pathname + (query ? '?' + query : '')
+}
 function loseLife() {
   lives--
   shots.length = 0
@@ -2421,6 +2451,7 @@ Promise.all([
   updateMovers()
   let autostart = null
   try { autostart = sessionStorage.getItem('bulletz.autostart'); sessionStorage.removeItem('bulletz.autostart') } catch {}
+  if (!autostart && !onTruck && stage === 1) { try { sessionStorage.removeItem('bulletz.continues') } catch {} }   // partida nova: 3 continues
   if (autostart) {
     startGame()
     if (autostart === 'fs') {

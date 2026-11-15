@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0e081a">
 <title>BULLETZ — Divorced Dad Rock</title>
-<link rel="stylesheet" href="style.css?v=19">
-<script type="module" src="game.js?v=128"></script>
+<link rel="stylesheet" href="style.css?v=20">
+<script type="module" src="game.js?v=130"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -59,7 +59,10 @@
 
     <section id="gameover" class="overlay gameover" aria-label="Fim de jogo" hidden>
       <img class="gameover-title" src="assets/fim-de-jogo.png" alt="FIM DE JOGO">
-      <button id="gameover-restart" type="button" class="start-button">REINICIAR JOGO</button>
+      <div class="gameover-actions">
+        <button id="gameover-continue" type="button" class="start-button">CONTINUAR · 3</button>
+        <button id="gameover-restart" type="button" class="start-button alt">REINICIAR JOGO</button>
+      </div>
     </section>
 
     <section id="menu" class="overlay menu" aria-label="Menu" hidden>
