@@ -6,6 +6,37 @@ import { fase2 } from './fase2.js'
 import { fase21 } from './fase21.js'
 import { createMidiPlayer } from './midiplayer.js'
 
+// Troca de fase SEM recarregar a página (recarregar tira o navegador da tela cheia): a instância atual é encerrada
+// (listeners removidos, laço parado, música pausada) e game.js é importado de novo com outra URL, lendo a nova fase.
+// Para saber o que remover, todo addEventListener feito pela página fica registrado.
+const bootAt = performance.now()
+if (!window.__bulletzListeners) {
+  window.__bulletzListeners = []
+  const nativeAdd = EventTarget.prototype.addEventListener
+  EventTarget.prototype.addEventListener = function (type, listener, options) {
+    window.__bulletzListeners.push([this, type, listener, options])
+    return nativeAdd.call(this, type, listener, options)
+  }
+}
+let disposed = false
+function disposeInstance() {
+  disposed = true
+  for (const [target, type, listener, options] of window.__bulletzListeners.splice(0)) target.removeEventListener(type, listener, options)
+  try { music.pause() } catch {}
+  window.__bulletzAudio = { soundContext, shotSound, deathGruntSound, deathScreamSound }   // a próxima instância reaproveita o áudio já liberado
+}
+function goToStage(fase, { autostart = true } = {}) {
+  const params = new URLSearchParams(location.search)
+  if (fase) params.set('fase', fase); else params.delete('fase')
+  params.delete('fim')
+  const url = location.pathname + (params.toString() ? '?' + params.toString() : '')
+  history.replaceState(null, '', url)
+  try { if (autostart) sessionStorage.setItem('bulletz.autostart', '1'); else sessionStorage.removeItem('bulletz.autostart') } catch {}
+  if (autostart) document.documentElement.classList.add('stage-loading')   // preto enquanto a nova fase carrega
+  disposeInstance()
+  import('./game.js?boot=' + Date.now()).catch(() => { location.href = url })   // plano B: recarrega a página
+}
+
 const select = (selector) => document.querySelector(selector)
 const game = select('#game')
 const preview = select('#sprite')
@@ -302,6 +333,7 @@ const sprites = {}
 // Fase 1 toca o MP3 do <audio>; a Fase 2 toca um MIDI sintetizado por midiplayer.js (com a mesma interface),
 // escolhido num seletor no menu e lembrado entre as partidas
 const music = stage === 2 ? createMidiPlayer(fase2.musicas[0].arquivo, { volume: .38, mix: fase2.musicas[0].mix }) : select('#music')
+select('#music-controls span').textContent = 'BULLETS — CREED'
 if (stage === 2) {
   const label = select('#music-controls span')
   const choose = document.createElement('select')
@@ -381,6 +413,13 @@ let shotSound
 let deathGruntSound
 let deathScreamSound
 let pendingShotAt = -Infinity
+{
+  const kept = window.__bulletzAudio
+  if (kept?.soundContext) {
+    ;({ soundContext, shotSound, deathGruntSound, deathScreamSound } = kept)
+    window.__bulletzAudio = null
+  }
+}
 // Velocidade do som do tiro (1 = original). Mais alto = mais curto e mais agudo.
 const shotSoundRate = 2.3
 const shotAudioData = fetch('assets/tiro-blaster.wav')
@@ -434,6 +473,7 @@ function playShotSound() {
   flushShotSound()
 }
 
+if (soundContext) soundContext.addEventListener('statechange', flushShotSound)
 window.addEventListener('keydown', enableSound)
 window.addEventListener('pointerdown', enableSound)
 window.addEventListener('pointerup', enableSound)
@@ -588,12 +628,7 @@ function updateStageOut(dt) {
   else if (s.banner && !s.wiped && s.t >= stageOut.bannerAt) { s.wiped = true; gameFx.startWipe() }
   else if (s.wiped && gameFx.wipeTime >= stageOut.wipeEnd) {
     outSeq = null
-    const params = new URLSearchParams(location.search)
-    params.set('fase', nextStage[onTruck ? '2.1' : String(stage)])
-    params.delete('fim')
-    // a próxima fase começa sozinha, sem passar pela tela inicial (e volta à tela cheia no primeiro toque, se estava)
-    try { sessionStorage.setItem('bulletz.autostart', document.fullscreenElement ? 'fs' : '1') } catch {}
-    location.href = location.pathname + '?' + params.toString()
+    goToStage(nextStage[onTruck ? '2.1' : String(stage)])   // sem recarregar: a tela cheia continua
   }
 }
 function startEnding() {
@@ -677,7 +712,7 @@ const titleScreen = select('#title-screen')
 const menuScreen = select('#menu')
 const fullscreenToggle = select('#fullscreen-toggle')
 let mode = 'title'
-let wantFullscreen = false
+let wantFullscreen = !!document.fullscreenElement   // numa troca de fase a tela cheia continua
 let fullscreenExitAt = -Infinity
 let fullscreenRequestAt = -Infinity
 
@@ -832,6 +867,7 @@ select('#speed').onchange = (event) => {
   fps = Number(event.target.value)
   select('#rate').textContent = fps + ' QPS'
 }
+select('.timeline').replaceChildren()
 const frameButtons = Array.from({length:8}, (_, i) => {
   const button = document.createElement('button')
   button.type = 'button'
@@ -1252,6 +1288,7 @@ function hitPlayer() {
 // só resta voltar ao início do jogo (tela inicial).
 const maxContinues = 3
 const gameOverScreen = select('#gameover')
+gameOverScreen.hidden = true
 const continueButton = select('#gameover-continue')
 const restartButton = select('#gameover-restart')
 function continuesLeft() {
@@ -1281,14 +1318,8 @@ continueButton.onclick = () => {
 }
 restartButton.onclick = () => {
   const noContinues = continuesLeft() === 0
-  try {
-    sessionStorage.removeItem('bulletz.continues')
-    if (!noContinues) sessionStorage.setItem('bulletz.autostart', '1')   // reiniciar: já começa jogando; sem continues: tela inicial
-  } catch {}
-  const params = new URLSearchParams(location.search)
-  params.delete('fase'); params.delete('fim')
-  const query = params.toString()
-  location.href = location.pathname + (query ? '?' + query : '')
+  try { sessionStorage.removeItem('bulletz.continues') } catch {}
+  goToStage(null, { autostart: !noContinues })   // reiniciar: já começa jogando na Fase 1; sem continues: tela inicial
 }
 function loseLife() {
   lives--
@@ -2454,6 +2485,7 @@ function renderPlayerHud() {
   hudScore = score
 }
 function tick(now) {
+  if (disposed) return
   const dt = last ? Math.min((now-last)/1000,.033) : 0
   last = now
   if (mode === 'play') update(dt)
@@ -2496,7 +2528,7 @@ Promise.all([
     startGame()
     // a tela preta segura um instante (para as imagens e o primeiro quadro estarem prontos) e então some devagar
     const root = document.documentElement
-    const wait = Math.max(0, 600 - performance.now())
+    const wait = Math.max(0, 600 - (performance.now() - bootAt))
     setTimeout(() => {
       root.classList.replace('stage-loading', 'stage-reveal')
       setTimeout(() => root.classList.remove('stage-reveal'), 900)
