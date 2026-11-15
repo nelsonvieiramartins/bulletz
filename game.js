@@ -1089,14 +1089,12 @@ function update(dt) {
   for (const checkpoint of checkpoints) {
     if (player.x >= checkpoint && respawnX < checkpoint && player.grounded && !player.mover) {
       respawnX = checkpoint
-      announce('PONTO DE CONTROLE',1.6)
+      gameFx.checkpoint()
       sfx.play('checkpoint')
     }
   }
   if (zoneIndex < zones.length && player.x >= zones[zoneIndex][0]) {
-    announce(zones[zoneIndex][1],2.2)
-    sfx.play('zone')
-    zoneIndex++
+    zoneIndex++   // os nomes dos setores não aparecem mais: só o CHECK POINT
   }
   for (const pickup of pickups) {
     if (pickup.taken || Math.abs(player.x-pickup.x) > 14 || pickup.y < player.y-62 || pickup.y > player.y+4) continue
@@ -1323,7 +1321,6 @@ function completePlayerFall() {
   }
   reset(false)
   bossHud.hidden = true
-  announce(lives === 1 ? 'ÚLTIMA VIDA' : 'VIDAS RESTANTES ×' + lives, 1.35)
 }
 
 function landOnPlatform(actor, previousY, radius, withMovers = false) {

@@ -11,3 +11,4 @@ Modificação local: src/fx/projectiles/muzzle-smg.js ganhou a opção casingFlo
 - src/fx/ui/combo-counter.js: novas opções `text` (palavra grande no lugar do "x5") e `hold` (tempo parado antes de sair), mais as letras Á e Í; usado em "ESTÁGIO CONCLUÍDO".
 
 - heavy-cleave: opcao `burst` (so o clarao do final, sem chao); usada em gamefx.tip na ponta da faca do Fofao.
+- level-up: opcao `titleOnly` (so o texto e o brilho ao redor dele, sem pilar, aneis nem heroi); usada em gamefx.checkpoint.

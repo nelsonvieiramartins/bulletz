@@ -15,6 +15,7 @@ import * as heavyCleave from './vendor/pixelfx/src/fx/melee/heavy-cleave.js'
 import * as groundSlam from './vendor/pixelfx/src/fx/impacts/ground-slam.js'
 import * as comboCounter from './vendor/pixelfx/src/fx/ui/combo-counter.js'
 import * as shatterWipe from './vendor/pixelfx/src/fx/transitions/shatter-wipe.js'
+import * as levelUp from './vendor/pixelfx/src/fx/ui/level-up.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 
 const maxOneShots = 28
@@ -35,6 +36,8 @@ export function createGameFx(width, height) {
   let muzzle = null
   // faixa de texto (combo-counter) e transição de tela (shatter-wipe, que tem tela própria de 320x180, esticada para a do jogo)
   let banner = null, bannerTime = 0, bannerLength = 0
+  // texto "CHECK POINT" (level-up do pixelfx) no meio da tela
+  let checkpoint = null, checkpointTime = 0
   const wipeFrame = createFrame(320, 180)
   const wipeCanvas = document.createElement('canvas')
   wipeCanvas.width = 320
@@ -108,6 +111,11 @@ export function createGameFx(width, height) {
       bannerTime = 0
       bannerLength = 1.45 + hold
     },
+    /** "CHECK POINT" no meio da tela: pilar de luz, as letras caem e brilham (level-up). Dura 3,2 s. */
+    checkpoint({ text = 'CHECK POINT' } = {}) {
+      checkpoint = createFx(levelUp, { x: 240, y: 205, seed: seed(), text, titleOnly: true })
+      checkpointTime = 0
+    },
     get bannerActive() { return !!banner },
     /** Transição de tela que fecha (shatter-wipe): o vidro cai, trinca, estoura e os cacos caem. Dura 2,8 s. */
     startWipe() { wipe = createFx(shatterWipe, { seed: seed() }) },
@@ -151,6 +159,11 @@ export function createGameFx(width, height) {
         banner.update(dt)
         if (bannerTime >= bannerLength) banner = null
       }
+      if (checkpoint) {
+        checkpointTime += dt
+        checkpoint.update(dt)
+        if (checkpoint.done()) checkpoint = null
+      }
       if (wipe) wipe.update(dt)
       for (let i = oneShots.length - 1; i >= 0; i--) {
         const fx = oneShots[i]
@@ -162,18 +175,22 @@ export function createGameFx(width, height) {
       oneShots.length = 0
       muzzle = null
       banner = null
+      checkpoint = null
       wipe = null
     },
     /** Desenha tudo no ctx (já com a escala do jogo). scroll = deslocamento da câmera em unidades do jogo. */
     draw(ctx, scroll) {
-      if (!oneShots.length && !banner) return
+      if (!oneShots.length && !banner && !checkpoint) return
       frame.ox = scroll
       clearFrame(frame)
       if (banner) banner.options.x = scroll + 240   // a faixa fica no centro da tela, não do mundo
+      if (checkpoint) checkpoint.options.x = scroll + 240
       for (const fx of oneShots) fx.draw(frame, 'back')
       if (banner) banner.draw(frame, 'back')
+      if (checkpoint) checkpoint.draw(frame, 'back')
       for (const fx of oneShots) fx.draw(frame, 'front')
       if (banner) banner.draw(frame, 'front')
+      if (checkpoint) checkpoint.draw(frame, 'front')
       composite(frame, image.data, null)
       context.putImageData(image, 0, 0)
       ctx.drawImage(canvas, 0, 0)

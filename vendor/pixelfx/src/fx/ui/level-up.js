@@ -15,7 +15,7 @@ export const meta = {
   fps: 30,
   bg: "ground",
   actor: 2,
-  options: { palette: ["#2a1405", "#5c3008", "#9a5a0e", "#d48e18", "#f5b92c", "#ffde5e", "#fff4bc", "#ffffff"], text: "LEVEL UP!", seed: 5 },
+  options: { palette: ["#2a1405", "#5c3008", "#9a5a0e", "#d48e18", "#f5b92c", "#ffde5e", "#fff4bc", "#ffffff"], text: "LEVEL UP!", seed: 5, titleOnly: false /* só o texto e o que brilha ao redor dele: sem pilar, anéis, nem nada em volta do herói */ },
 };
 
 const COIL = { turn: 0.9, crouch: 7, lean: 2, fx: -6, fy: -13, bx: 7, by: -13, ffx: -5, fbx: 6 };
@@ -116,7 +116,7 @@ function rays(p, C, t, k, cx, cy) {
 }
 
 export function create(o) {
-  const C = fit(o.palette, 8), R = new Rng(o.seed), A = o.actor, SHADOW = scale(C[0], 0.5);
+  const T = !!o.titleOnly, C = fit(o.palette, 8), R = new Rng(o.seed), A = o.actor, SHADOW = scale(C[0], 0.5);
   const ps = new Particles({ rng: R, ground: () => 0, sparks: [C[7], C[6], C[5], C[3]] }), lights = new Lights();
   // every particle is gone by the end
   const spawn = (k, x, y, vx, vy, life, ...rest) => ps.spawn(k, x, y, vx, vy, Math.min(life, meta.duration - 0.05 - t), ...rest);
@@ -147,7 +147,7 @@ export function create(o) {
       t += dt;
       // the gathering: streaks pour in along the floor to the feet and in from all round to the body, and in the
       // last beat run up the hero from the feet; the late ones are swallowed by the burst
-      for (gather += t < REL ? dt * 420 : 0; gather >= 1; gather--) {
+      for (gather += !T && t < REL ? dt * 420 : 0; gather >= 1; gather--) {
         const kind = R.next(), sp = R.range(140, 250) * (1 + t * 2);
         let x, y, tx, ty;
         if (kind < 0.42) {
@@ -168,8 +168,8 @@ export function create(o) {
         if ((m.life -= dt) <= 0) rush.splice(i, 1);
         else (m.x += m.vx * dt), (m.y += m.vy * dt);
       }
-      if (t < REL && R.chance(0.12)) spawn(P.STAR, R.range(-30, 30), -R.range(0, 3), 0, -R.range(10, 30), R.range(0.3, 0.5), C[6], 0.6);
-      if (!released && t >= REL) {
+      if (!T && t < REL && R.chance(0.12)) spawn(P.STAR, R.range(-30, 30), -R.range(0, 3), 0, -R.range(10, 30), R.range(0.3, 0.5), C[6], 0.6);
+      if (!T && !released && t >= REL) {
         released = true;
         lights.add(0, -24, 90, C[5], 0.6, 0.7);
         lights.add(0, -8, 40, WHITE, 0.6, 0.12);
@@ -187,19 +187,19 @@ export function create(o) {
           spawn(P.STAR, R.range(-10, 10), R.range(-36, -4), R.range(-30, 30), -R.range(15, 60), R.range(0.6, 1.3), R.pick([C[7], C[6], C[5]]), R.chance(0.35) ? R.range(1.5, 2.6) : R.range(0.4, 0.9), 0, R.chance(0.4) ? PF.BACK : 0);
       }
       const W = widthAt(t);
-      if (t >= nextHalo && t < RET - 0.1) halos.push(t), (nextHalo += 0.16);
+      if (!T && t >= nextHalo && t < RET - 0.1) halos.push(t), (nextHalo += 0.16);
       // streaks race up beside the pillar
-      if (t > REL && t < RET + 0.1 && R.chance(0.5)) {
+      if (!T && t > REL && t < RET + 0.1 && R.chance(0.5)) {
         const s = R.sign();
         const y = R.range(-4, -60), vy = -R.range(140, 260);
         spawn(P.MOTE, s * R.range(0.75, 1.6) * W, y, 0, vy, Math.min(R.range(0.16, 0.32), (y + 96) / -vy), R.chance(0.5) ? C[7] : C[6], R.range(0.6, 1), 0, R.chance(0.5) ? PF.BACK : 0);
       }
       // motes rise from the floor while the light lasts
-      if (t > REL && t < 2.4 && R.chance(0.14 * (1 - seg(t, 1.6, 2.4)))) {
+      if (!T && t > REL && t < 2.4 && R.chance(0.14 * (1 - seg(t, 1.6, 2.4)))) {
         spawn(P.EMBER, R.range(-20, 20), -R.range(1, 30), R.range(-15, 15), -R.range(20, 55), R.range(0.8, 1.6), C[5], R.range(1, 2), 0, R.chance(0.4) ? PF.BACK : 0);
       }
       // gold motes lift off the hero while the light lasts
-      if (A && t > REL + 0.1 && t < 2.2 && R.chance(0.09)) {
+      if (!T && A && t > REL + 0.1 && t < 2.2 && R.chance(0.09)) {
         const m = A.mask;
         for (let n = 0; n < 12; n++) {
           const i = R.int(0, m.w - 1), j = R.int(0, m.h - 1);
@@ -210,7 +210,7 @@ export function create(o) {
       }
       // twinkles round the title and the hero while it holds
       if (t > 1.0 && t < 2.5 && R.chance(0.13)) {
-        const up = R.chance(0.6), x = up ? R.range(-58, 58) : R.range(-20, 20), y = up ? TY + 7 + R.range(-16, 16) : R.range(-44, -6);
+        const up = T || R.chance(0.6), x = up ? R.range(-58, 58) : R.range(-20, 20), y = up ? TY + 7 + R.range(-16, 16) : R.range(-44, -6);
         spawn(P.STAR, x, y, R.range(-6, 6), -R.range(4, 14), R.range(0.4, 0.8), R.pick([C[7], C[6], C[6], C[5]]), R.chance(0.3) ? R.range(1.5, 2.4) : 0.6, 0, R.chance(0.3) ? PF.BACK : 0);
       }
       // the letters drop in, bounce and settle; then pop away one by one
@@ -250,6 +250,7 @@ export function create(o) {
 
     drawBack(p) {
       rays(p, C, t, ease.outExpo(seg(t, LANDED, LANDED + 0.2)) * (1 - ease.inQuad(seg(t, EXIT - 0.15, EXIT + 0.1))), 0, TY + 7);
+      if (!T) {
       if (t < REL) {
         const k = seg(t, 0.02, REL);
         band(p, 0, 0, 4 + 52 * (1 - ease.inQuad(k)), 0.2, 1.5, k * 1.1, C, (g) => Math.sin(g) < 0);
@@ -264,11 +265,13 @@ export function create(o) {
       }
       column(p, C, t);
       plate(p, C, t, t < REL ? 0.55 * seg(t, 0.05, REL) : 1 - smooth(RET - 0.1, GONE + 0.2, t));
+      }
       ps.draw(p, "back");
       drawRush(p, true);
     },
 
     draw(p) {
+      if (!T) {
       // near halves of the rings, in front of the hero
       if (t < REL) {
         const k = seg(t, 0.02, REL);
@@ -295,6 +298,7 @@ export function create(o) {
         const a = (t - REL) / 0.22;
         flare(p, 0, -4, 28 * Math.pow(1 - a, 1.5), 1 - a, C);
         p.glow(0, -16, 48, WHITE, 0.3 * (1 - a));
+      }
       }
       ps.draw(p, "front");
       drawRush(p, false);
