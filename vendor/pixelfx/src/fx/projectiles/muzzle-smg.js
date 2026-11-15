@@ -19,6 +19,10 @@ export const meta = {
     smoke: ["#26222e", "#3b3644", "#544e5e", "#6f6979", "#8c8596", "#aca5b5", "#cbc4d2"],
     height: 26,
     seed: 6,
+    // BULLETZ: distância do chão dos cartuchos até a origem do efeito (positivo = abaixo). Padrão: no chão da origem.
+    casingFloor: -0.5,
+    // BULLETZ: tamanho do clarão (1 = original); a Fase 2.1 usa personagens menores
+    scale: 1,
   },
 };
 
@@ -57,14 +61,15 @@ export function draw(p, t, o) {
 
   // casings: thrown up and back out of the ejection port, tumbling, bouncing on the floor, then lying a moment
   shots(t, D, D, (s, age) => {
-    const r = rng(S, s, 7), k = casing(-7, MY - 1, -r.range(18, 48), -r.range(85, 135), r.sign() * r.range(20, 32), age, 850, -0.5, 0.42, r.range(0, TAU));
+    const r = rng(S, s, 7), k = casing(-7, MY - 1, -r.range(18, 48), -r.range(85, 135), r.sign() * r.range(20, 32), age, 850, o.casingFloor ?? -0.5, 0.42, r.range(0, TAU));
     drawCasing(p, k, B, clamp((D - age) / 0.25));
   });
 
   // the flash: a hero frame with a white core, then a cooler, smaller one; every shot its own shape
   shots(t, D, 2 * F1, (s, age) => {
     const r = rng(S, s), f = age < F1 ? 1 : 2, tilt = r.range(-0.06, 0.06);
-    const L = flashShape(r, f, { size: r.range(0.95, 1.2), spike: [12, 21], diag: [6, 11], cross: [4, 7.5], back: [2.5, 5] });
+    const SC = o.scale ?? 1;
+    const L = flashShape(r, f, { size: r.range(0.95, 1.2), spike: [12 * SC, 21 * SC], diag: [6 * SC, 11 * SC], cross: [4 * SC, 7.5 * SC], back: [2.5 * SC, 5 * SC] });
     const C = f === 1 ? [WHITE, F[7], F[6], F[3]] : [F[7], F[6], F[4], F[2]];
     flash(p, MX, MY, tilt, L, C, s * 7 + f);
   });

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0e081a">
 <title>BULLETZ — Divorced Dad Rock</title>
-<link rel="stylesheet" href="style.css?v=16">
-<script type="module" src="game.js?v=58"></script>
+<link rel="stylesheet" href="style.css?v=17">
+<script type="module" src="game.js?v=91"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -49,6 +49,9 @@
       <nav class="title-links" aria-label="Ferramentas de teste">
         <a href="efeitos.html">Teste FX</a>
         <a href="sprites.html">Sprites</a>
+        <a href="index.html">Fase 1</a>
+        <a href="index.html?fase=2">Fase 2</a>
+        <a href="index.html?fase=2.1">Fase 2.1</a>
       </nav>
       <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
     </section>
@@ -66,6 +69,7 @@
           <button id="resume" type="button" class="start-button">CONTINUAR</button>
           <button id="reset" type="button">Reiniciar fase <span aria-hidden="true">↻</span></button>
           <button id="fullscreen-toggle" type="button">Tela cheia</button>
+          <label class="phase-pick">Fase <select id="phase-select" aria-label="Escolher a fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · Em cima da Carreta Furação</option></select></label>
         </div>
 
         <details class="menu-section" open>

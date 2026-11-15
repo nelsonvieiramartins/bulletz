@@ -1,0 +1,36 @@
+{
+ "sprite": {
+  "w": 1340,
+  "h": 360
+ },
+ "rodas": [
+  {
+   "file": "roda-1.webp",
+   "cx": 179,
+   "cy": 315,
+   "r": 25,
+   "size": 51
+  },
+  {
+   "file": "roda-2.webp",
+   "cx": 279,
+   "cy": 315,
+   "r": 25,
+   "size": 51
+  },
+  {
+   "file": "roda-3.webp",
+   "cx": 927,
+   "cy": 315,
+   "r": 25,
+   "size": 51
+  },
+  {
+   "file": "roda-4.webp",
+   "cx": 1203,
+   "cy": 315,
+   "r": 25,
+   "size": 51
+  }
+ ]
+}

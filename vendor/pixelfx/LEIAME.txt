@@ -3,3 +3,6 @@
 Copiado de https://github.com/patch-gg/pixelfx (commit 5294518, 2026-11-12), licença MIT (ver LICENSE e NOTICE.md).
 Só o código em src/ e a documentação; sem tools, gallery nem a fonte Patch Pixel.
 Amostras de todos os efeitos: efeitos.html na raiz do projeto.
+Modificação local: src/fx/projectiles/muzzle-smg.js ganhou a opção casingFloor (chão dos cartuchos), usada pelo BULLETZ.
+
+- src/fx/projectiles/muzzle-smg.js: nova opção `scale` (padrão 1) que reduz o tamanho do clarão; usada na Fase 2.1, com personagens 10% menores.

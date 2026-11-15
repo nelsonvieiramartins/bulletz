@@ -59,6 +59,7 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 .menu-logo{width:110px;height:auto}
 .menu-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .menu-actions .start-button{font-size:14px;padding:10px 18px}
+.phase-pick{display:flex;align-items:center;gap:6px;font:700 12px var(--mono);color:var(--muted)}
 .menu-section{border-top:1px solid var(--line);padding:10px 0;font:12px/1.55 var(--mono);color:var(--muted)}
 .menu-section summary{cursor:pointer;color:#fff2e3;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 .menu-section p{font:13px/1.55 system-ui,sans-serif;color:#e1d0e4;margin:8px 0}

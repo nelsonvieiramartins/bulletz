@@ -37,14 +37,15 @@ export function createGameFx(width, height) {
       oneShots.push(createFx(collectBurst, { x, y: y + 30, seed: seed(), palette: goldPalette }))
       if (oneShots.length > maxOneShots) oneShots.shift()
     },
-    /** Chamar a cada quadro: um objeto { x, floor, height, flip } enquanto o Edu atira, ou null. */
+    /** Chamar a cada quadro: { x, floor, height, flip, casingFloor, scale } enquanto o Edu atira, ou null.
+     casingFloor = distância dos pés do Edu até o chão onde os cartuchos caem (0 no chão; maior no ar). */
     muzzle(state) {
       if (!state) {
         if (muzzle) { muzzle.stop(); muzzle = null }
         return
       }
       if (!muzzle) muzzle = createFx(muzzleSmg, { seed: seed() })
-      Object.assign(muzzle.options, { x: state.x, y: state.floor, height: state.height, flip: state.flip })
+      Object.assign(muzzle.options, { x: state.x, y: state.floor, height: state.height, flip: state.flip, casingFloor: state.casingFloor ?? -0.5, scale: state.scale ?? 1 })
       if (!muzzle.live) { muzzle.live = true; oneShots.push(muzzle) }
     },
     update(dt) {

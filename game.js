@@ -2,6 +2,9 @@ import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js'
 import { createGameFx } from './gamefx.js'
 import { applySpriteConfig } from './spriteconfig.js'
+import { fase2 } from './fase2.js'
+import { fase21 } from './fase21.js'
+import { createMidiPlayer } from './midiplayer.js'
 
 const select = (selector) => document.querySelector(selector)
 const game = select('#game')
@@ -31,7 +34,10 @@ let shotTick = 0
 // desenhadas na metade do tamanho em unidades do mundo (1:1 nos pixels do canvas).
 const heroCell = { w: 192, h: 160, anchorX: 80, feetY: 152 }
 // Aumenta o Edu em 5 unidades visuais, mantendo os pés presos ao chão e a hitbox original.
-const heroVisualScale = (heroCell.h / pixelScale + 5) / (heroCell.h / pixelScale)
+// Tamanho dos personagens (Edu e inimigos): 1 normalmente; a Fase 2.1 usa 0,9 (10% menores). Vale para o desenho, as caixas de
+// acerto, a saída dos tiros e o clarão do cano, para tudo continuar alinhado.
+const charScale = new URLSearchParams(location.search).get('fase') === '2.1' ? .9 : 1
+const heroVisualScale = (heroCell.h / pixelScale + 5) / (heroCell.h / pixelScale) * charScale
 const heroSheets = new Set(['idle','run','runFire','idleFire','playerFall','crouch','jump'])
 const jumpTuckLift = 10
 const crouchFireMuzzle = [26,-31]
@@ -49,6 +55,18 @@ const sequences = {
 }
 const fallFrameDuration = .11
 const fallDuration = .68
+// Fase escolhida pela URL: index.html?fase=2 abre a Fase 2 (Av. T-9, Goiânia).
+// Por enquanto a Fase 2 troca só o cenário; traçado, inimigos e chefe ainda são os da Fase 1.
+const faseParam = new URLSearchParams(location.search).get('fase')
+// 1 = Cidade dos Boletos; 2 = Av. T-9; 2.1 = em cima da Carreta Furação em movimento (usa a arte e a música da Fase 2)
+const onTruck = faseParam === '2.1'
+const stage = faseParam === '2' || onTruck ? 2 : 1
+const stageData = onTruck ? fase21 : fase2
+// Altura do chão onde o Edu nasce, os inimigos patrulham e o chefe fica (a Fase 2 pisa mais baixo, no asfalto)
+const groundY = stage === 2 ? stageData.groundY : 224
+// Impulso do pulo. A Fase 2 pula mais alto para alcançar o teto dos carros (~68 acima do chão: 360 sobe ~82; 315 sobe ~62).
+// Na Fase 2.1 o pulo do Edu é igual ao dos soldados (292, sobe ~54): ele sobe os andares da carreta como eles.
+const jumpSpeed = onTruck ? 292 : stage === 2 ? 360 : 315
 // Fase em três setores: Cidade dos Boletos, Viadutos da Pensão e Distrito dos Juros
 const platforms = [
   // Setor 1 · A Cidade dos Boletos
@@ -111,6 +129,15 @@ const enemySpawns = [
   H(5930,140),
   E(6200,6090,6420), H(6260), P(6350,6100,6440)
 ]
+// Fase 2: troca o traçado acima pelo de fase2.js (mesmo formato, mesma arena do chefe)
+if (stage === 2) {
+  for (const [target, source] of [[platforms, stageData.platforms], [movers, stageData.movers], [checkpoints, stageData.checkpoints],
+    [zones, stageData.zones], [pickupSpots, stageData.pickupSpots], [powerUpSpots, stageData.powerUpSpots], [enemySpawns, stageData.enemySpawns]])
+    target.splice(0, target.length, ...source)
+  const menuHead = document.querySelector('.menu-head')
+  menuHead.querySelector('.eyebrow').textContent = stageData.eyebrow ?? 'PAUSA · FASE 2'
+  menuHead.querySelector('strong').textContent = stageData.title
+}
 const enemyTypes = {
   patrol: { hp: 3, points: 150, interval: 2.25, speed: 86, reach: 225, shotSpeed: 125 },
   elite: { hp: 5, points: 300, interval: 1.45, speed: 102, reach: 250, shotSpeed: 150 },
@@ -143,18 +170,19 @@ let lives = maxLives
 let score = 0
 let invulnerability = 0
 const bossHp = 24
-const boss = { x: 6680, y: 224, hp: bossHp, delay: .75, volley: 0 }
+const boss = { x: 6680, y: groundY, hp: bossHp, delay: .75, volley: 0 }
+
+function createEnemy({ x, type, min, max, y }) {
+  const drone = type === 'drone' || type === 'heavyDrone'
+  return { x, origin: x, kind: drone ? 'drone' : 'patrol', type, elite: type === 'elite' || type === 'heavyDrone',
+    y, spawnY: y, min, max,
+    hp: enemyTypes[type].hp, delay: drone ? 1.25 : 1.1+(x%7)*.14, face: -1, moving: false,
+    route: x % 3 === 0 ? 1 : -1, vx: 0, vy: 0, stride: 0, grounded: true, airTime: 0, landing: 0 }
+}
 
 function populateEnemies(at) {
   enemies.length = 0
-  for (const { x, type, min, max, y } of enemySpawns) {
-    if (x <= at) continue
-    const drone = type === 'drone' || type === 'heavyDrone'
-    enemies.push({ x, origin: x, kind: drone ? 'drone' : 'patrol', type, elite: type === 'elite' || type === 'heavyDrone',
-      y, spawnY: y, min, max,
-      hp: enemyTypes[type].hp, delay: drone ? 1.25 : 1.1+(x%7)*.14, face: -1, moving: false,
-      route: x % 3 === 0 ? 1 : -1, vx: 0, vy: 0, stride: 0, grounded: true, airTime: 0, landing: 0 })
-  }
+  for (const spawn of enemySpawns) if (spawn.x > at) enemies.push(createEnemy(spawn))
   pickups.length = 0
   for (const [x,y] of pickupSpots) if (x > at) pickups.push({ x, y, taken: false })
   powerUps.length = 0
@@ -209,7 +237,7 @@ let idleTime = 0
 let playerFall = null
 let last = 0
 let jumpPressed = false
-let respawnX = 70
+let respawnX = onTruck ? fase21.startX : 70
 let zoneIndex = 0
 let finish = false
 let previewPlaying = true
@@ -220,7 +248,8 @@ let fps = 12
 let readFrame = -1
 let progress = -1
 let noticeUntil = 0
-const player = {x:70,y:224,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false}
+const startX = onTruck ? fase21.startX : 70
+const player = {x:startX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false}
 const notice = select('#notice')
 const progressText = select('#progress')
 const livesText = select('#lives')
@@ -248,7 +277,35 @@ const padSteps = ['Mova o direcional para a esquerda.', 'Mova o direcional para 
 const frameText = select('#frame')
 const play = select('#play')
 const sprites = {}
-const music = select('#music')
+// Fase 1 toca o MP3 do <audio>; a Fase 2 toca um MIDI sintetizado por midiplayer.js (com a mesma interface),
+// escolhido num seletor no menu e lembrado entre as partidas
+const music = stage === 2 ? createMidiPlayer(fase2.musicas[0].arquivo, { volume: .38, mix: fase2.musicas[0].mix }) : select('#music')
+if (stage === 2) {
+  const label = select('#music-controls span')
+  const choose = document.createElement('select')
+  choose.setAttribute('aria-label', 'Música da fase')
+  for (const m of fase2.musicas) choose.add(new Option(m.nome, m.id))
+  let saved = null
+  try { saved = localStorage.getItem('bulletz-fase2-musica') } catch {}
+  const pick = (id) => fase2.musicas.find(m => m.id === id) ?? fase2.musicas[0]
+  choose.value = pick(saved).id
+  music.setSource(pick(choose.value).arquivo, pick(choose.value).mix)
+  choose.onchange = () => {
+    try { localStorage.setItem('bulletz-fase2-musica', choose.value) } catch {}
+    music.setSource(pick(choose.value).arquivo, pick(choose.value).mix)
+  }
+  label.replaceChildren(choose)
+}
+// Seletor de fase no menu: recarrega a página na fase escolhida (mantém os outros parâmetros da URL, como ?debug)
+const phaseSelect = select('#phase-select')
+phaseSelect.value = onTruck ? '2.1' : String(stage)
+phaseSelect.onchange = () => {
+  const params = new URLSearchParams(location.search)
+  if (phaseSelect.value === '1') params.delete('fase')
+  else params.set('fase', phaseSelect.value)
+  const query = params.toString()
+  location.href = location.pathname + (query ? '?' + query : '')
+}
 const musicToggle = select('#music-toggle')
 const musicVolume = select('#music-volume')
 let musicEnabled = true
@@ -364,7 +421,7 @@ function reset(all = true) {
   playerFall = null
   pendingShotAt = -Infinity
   if (all) {
-    respawnX = 70
+    respawnX = startX
     zoneIndex = 0
     lives = maxLives
     score = 0
@@ -373,11 +430,13 @@ function reset(all = true) {
     notice.hidden = true
     keys.clear()
     populateEnemies(respawnX)
+    resetWaves()
+    resetSuspension()
   }
   invulnerability = .9
   enemyShots.length = 0
-  Object.assign(player,{x:respawnX,y:224,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false,mover:null})
-  camera = Math.max(0, player.x - 145)
+  Object.assign(player,{x:respawnX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false,mover:null})
+  camera = onTruck ? clamp(player.x - fase21.cameraLead, 0, fase21.cameraMax) : Math.max(0, player.x - 145)
   shots.length = 0
   impacts.length = 0
   sparks.length = 0
@@ -387,6 +446,93 @@ function reset(all = true) {
   gameFx.clear()
   jumpPressed = false
 }
+
+// Fase 2.1: ondas de inimigos. Cada onda só começa quando a anterior foi derrotada; os inimigos entram um a um pela borda da tela.
+const waveState = { index: 0, pending: [], clearedAt: null }
+function resetWaves() {
+  waveState.index = 0
+  waveState.pending.length = 0
+  waveState.clearedAt = null
+  if (onTruck) progressText.textContent = 'ONDA 0 / ' + fase21.waves.length
+}
+resetWaves()
+function spawnWaveEnemy({ type, level, side }) {
+  const drone = type === 'drone' || type === 'heavyDrone'
+  const maxX = fase21.bounds[1]
+  if (drone) {
+    const x = side === 'left' ? camera - 45 : camera + width + 45     // pelas bordas da tela, onde quer que a câmera esteja
+    const enemy = createEnemy({ x, type, y: level })
+    enemy.followOffset = (side === 'left' ? -1 : 1) * (70 + Math.random()*110)   // fica por perto do Edu, deste lado
+    enemy.glideTo = clamp(player.x + enemy.followOffset, 10, 660)                 // entra voando até aqui
+    enemy.origin = enemy.glideTo
+    enemy.face = side === 'left' ? 1 : -1
+    enemies.push(enemy)
+  } else {
+    // entra pela borda esquerda da tela (por trás da carreta, se a câmera estiver na traseira)
+    const enemy = createEnemy({ x: Math.max(camera - 45, -45), type, min: -45, max: maxX - 6, y: fase21.level[level] })
+    enemy.face = 1
+    enemy.route = 1
+    enemy.delay = 1.3 + Math.random()*.8
+    enemies.push(enemy)
+  }
+}
+function updateWaves(dt) {
+  const w = waveState
+  // os inimigos acompanham o Edu pela carreta: soldados patrulham em volta dele e os drones voam por perto
+  const [minX, maxX] = fase21.bounds
+  for (const e of enemies) {
+    if (e.hp <= 0) continue
+    if (e.kind === 'patrol') {
+      // faixa larga em volta do Edu (mais larga que a tela, para quem entra pela borda não ser empurrado para dentro dela)
+      e.min = clamp(player.x - 300, -45, maxX - 60)
+      e.max = clamp(player.x + 300, 64, maxX - 6)
+    } else if (e.followOffset !== undefined) {
+      const target = clamp(player.x + e.followOffset, 10, 660)
+      if (e.glideTo !== undefined) e.glideTo = target
+      else {
+        e.origin += (target - e.origin) * Math.min(1, dt * 1.5)
+        e.x += (e.origin - e.x) * Math.min(1, dt * 2)
+      }
+    }
+  }
+  while (w.pending.length && w.pending[0].at <= elapsed) spawnWaveEnemy(w.pending.shift().spec)
+  if (finish || w.pending.length || enemies.some(e => e.hp > 0)) { w.clearedAt = null; return }
+  if (w.clearedAt === null) w.clearedAt = elapsed - (w.index === 0 ? 1 : 0)   // a 1ª onda vem mais rápido
+  if (elapsed - w.clearedAt < 2.4) return
+  const waves = fase21.waves
+  if (w.index >= waves.length) {
+    finish = true
+    announce(fase21.victory, 6)
+    sfx.play('victory')
+    return
+  }
+  const wave = waves[w.index++]
+  progressText.textContent = 'ONDA ' + w.index + ' / ' + waves.length
+  announce(wave.name, 1.6)
+  w.clearedAt = null
+  for (const spec of [...wave.spawns].sort((a, b) => a.t - b.t)) w.pending.push({ at: elapsed + 1.6 + spec.t, spec })
+}
+
+// Fase 2.1: amortecimento da carreta. Uma mola amortecida segura o corpo da carreta; de tempos em tempos um solavanco
+// (buraco na pista) dá um empurrão e ele balança até parar. Só o desenho se mexe (carreta, Edu, inimigos, tiros);
+// a lógica do jogo e o cenário ao fundo ficam parados.
+const suspension = { y: 0, v: 0, next: 2.2, offset: 0 }
+function updateSuspension(dt) {
+  const s = fase21.suspension
+  suspension.next -= dt
+  if (suspension.next <= 0) {
+    const [minGap, maxGap] = s.bumpEvery, [minKick, maxKick] = s.kick
+    suspension.v += (minKick + Math.random() * (maxKick - minKick)) * (Math.random() < .7 ? 1 : -.6)   // mais afundando que subindo
+    suspension.next = minGap + Math.random() * (maxGap - minGap)
+  }
+  for (let i = 0; i < 3; i++) {   // 3 passos por quadro mantêm a mola estável
+    const step = dt / 3
+    suspension.v += (-s.stiffness * suspension.y - s.damping * suspension.v) * step
+    suspension.y += suspension.v * step
+  }
+  suspension.offset = Math.round(suspension.y)
+}
+function resetSuspension() { suspension.y = suspension.v = suspension.offset = 0; suspension.next = 2.2 }
 
 function setKey(key, active) {
   if (active && !keys.has(key) && ['Space','ArrowUp','KeyW'].includes(key)) jumpPressed = true
@@ -705,6 +851,7 @@ function updatePaused(dt) {
 function update(dt) {
   elapsed += dt
   updateMovers()
+  if (onTruck) updateSuspension(dt)
   if (elapsed > noticeUntil) notice.hidden = true
   if (previewPlaying) {
     previewTime = (previewTime + dt * fps) % sequences[previewSequence].count
@@ -729,7 +876,7 @@ function update(dt) {
   player.buffer -= dt
   player.coyote = player.grounded ? 0.09 : player.coyote - dt
   if (player.buffer > 0 && player.coyote > 0) {
-    player.vy = -315
+    player.vy = -jumpSpeed
     player.grounded = false
     player.coyote = 0
     player.buffer = 0
@@ -743,7 +890,7 @@ function update(dt) {
     player.y = player.mover.cy
   }
   const oldY = player.y
-  player.x = clamp(player.x + player.vx * dt,14,end)
+  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,end)
   player.vy += 790 * dt
   player.y += player.vy * dt
   player.grounded = false
@@ -802,7 +949,7 @@ function update(dt) {
   }
   if (player.x >= goal && boss.hp === 0 && !finish && player.grounded) {
     finish = true
-    announce('CIDADE LIBERTADA',6)
+    announce(stage === 2 ? fase2.victory : 'CIDADE LIBERTADA',6)
     sfx.play('victory')
   }
   if (player.grounded && Math.abs(player.vx) > 8) {
@@ -825,9 +972,10 @@ function update(dt) {
     player.crouch === 0 && !player.trigger && player.cooldown <= 0
   idleTime = idle ? idleTime + dt : 0
   if (!finish) updateCombat(dt)
+  if (onTruck) updateWaves(dt)
   const firing = player.trigger && lives > 0 && !finish && !playerFall ? playerPose().muzzle : null
   // o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano: o clarão acompanha a ponta que se vê
-  gameFx.muzzle(firing ? { x: player.x + player.face*firing[0]*heroVisualScale, floor: player.y, height: -firing[1]*heroVisualScale, flip: player.face < 0 } : null)
+  gameFx.muzzle(firing ? { x: player.x + player.face*firing[0]*heroVisualScale, floor: player.y, height: -firing[1]*heroVisualScale, flip: player.face < 0, scale: charScale, casingFloor: groundBelow(player.x, player.y) - player.y - .5 } : null)
   gameFx.update(dt)
   for (let i=droneExplosions.length-1; i>=0; i--) {
     const explosion = droneExplosions[i]
@@ -861,9 +1009,10 @@ function update(dt) {
   }
   for (const spark of sparks) { spark.y -= dt * 18; spark.t -= dt }
   while (sparks.length && sparks[0].t <= 0) sparks.shift()
-  camera += (clamp(player.x - 154,0,end+50-width) - camera) * Math.min(1,dt * 6)
+  if (onTruck) camera += (clamp(player.x - fase21.cameraLead,0,fase21.cameraMax) - camera) * Math.min(1,dt * 6)   // a câmera segue o Edu pela carreta
+  else camera += (clamp(player.x - 154,0,end+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
-  if (nextProgress !== progress) {
+  if (!onTruck && nextProgress !== progress) {
     progress = nextProgress
     progressText.textContent = progress + '% DA FASE'
   }
@@ -897,6 +1046,15 @@ function playSoldierDeathSound(dx = 0) {
   gain.gain.value = deathSoundVolume * .8 * near
   source.connect(gain).connect(soundContext.destination)
   source.start()
+}
+
+// Superfície mais próxima abaixo de (x, y): plataformas e plataformas móveis. Sem nada embaixo (buraco), devolve y + 400.
+// Os cartuchos do cano caem até ela em vez de quicar no ar.
+function groundBelow(x, y) {
+  let best = y + 400
+  for (const [px,py,pw] of platforms) if (x >= px && x <= px+pw && py >= y-1 && py < best) best = py
+  for (const m of movers) if (x >= m.cx && x <= m.cx+m.w && m.cy >= y-1 && m.cy < best) best = m.cy
+  return best
 }
 
 function hitPlayer() {
@@ -970,14 +1128,14 @@ function updatePatrol(enemy, distance, config, dt) {
   if (enemy.grounded) {
     if (!braking) {
       const ahead = enemy.x + enemy.route*9
-      const gapAhead = !platforms.some(([x,y,w]) => y === 224 && ahead >= x && ahead < x+w)
+      const gapAhead = !platforms.some(([x,y,w]) => y === groundY && ahead >= x && ahead < x+w)
       const ledgeAhead = platforms.some(([x,y,w]) => {
         if (y >= enemy.y || enemy.y-y > 54) return false
         const edge = enemy.route > 0 ? x : x+w
         const approach = (edge-enemy.x)*enemy.route
         return approach >= 12 && approach <= 20
       })
-      if (enemy.vx*enemy.route > 65 && ((enemy.y === 224 && gapAhead) || ledgeAhead)) {
+      if (enemy.vx*enemy.route > 65 && ((enemy.y === groundY && gapAhead) || ledgeAhead)) {
         enemy.vy = -292
       }
     }
@@ -992,7 +1150,7 @@ function updatePatrol(enemy, distance, config, dt) {
   else if (Math.abs(enemy.vx) > 4) enemy.face = Math.sign(enemy.vx)
 
   if (aiming && enemy.delay <= 0) {
-    const [x,y] = enemyMuzzles.patrol
+    const [x,y] = enemyMuzzles.patrol.map(v => v*charScale)
     enemyShots.push({x:enemy.x+enemy.face*x,y:enemy.y+y,vx:enemy.face*config.shotSpeed})
     sfx.play('patrolShot', { dx: enemy.x - player.x })
     enemy.delay = config.interval
@@ -1066,8 +1224,8 @@ function firstShotHit(shot, travel, bossActive) {
     hit = { target, x: shot.x + distance*shot.dx }
   }
   for (const enemy of enemies) {
-    if (enemy.kind === 'drone') check(enemy,18,enemy.y-14,enemy.y+14)
-    else check(enemy,12,enemy.y-66,enemy.y)
+    if (enemy.kind === 'drone') check(enemy,18*charScale,enemy.y-14*charScale,enemy.y+14*charScale)
+    else check(enemy,12*charScale,enemy.y-66*charScale,enemy.y)
   }
   if (bossActive) check(boss,36,boss.y-58,boss.y)
   return hit
@@ -1089,7 +1247,7 @@ function updateCombat(dt) {
     }
   }
   if (boss.hp > 0 && player.x > boss.x-40) player.x = boss.x-40
-  const playerTop = player.y - (player.crouch > .6 ? 40 : 58)
+  const playerTop = player.y - (player.crouch > .6 ? 40 : 58) * charScale
   for (const enemy of enemies) {
     enemy.hitKick = (enemy.hitKick || 0) * Math.max(0,1-dt*15)
     enemy.hitKickY = (enemy.hitKickY || 0) * Math.max(0,1-dt*18)
@@ -1102,7 +1260,7 @@ function updateCombat(dt) {
     const config = enemyTypes[enemy.type]
     if (enemy.kind === 'patrol') {
       updatePatrol(enemy,distance,config,dt)
-      if (Math.abs(player.x-enemy.x) < 15 && player.y > enemy.y-56 && playerTop < enemy.y && hitPlayer()) return
+      if (Math.abs(player.x-enemy.x) < 15*charScale && player.y > enemy.y-56*charScale && playerTop < enemy.y && hitPlayer()) return
       continue
     }
     const eliteDrone = enemy.type === 'heavyDrone'
@@ -1113,6 +1271,14 @@ function updateCombat(dt) {
       ? Math.sin(elapsed*1.12 + hoverPhase)*22 + Math.sin(elapsed*.47 + hoverPhase*.7)*5
       : Math.round(Math.sin(elapsed*3 + enemy.origin)*4))
     enemy.moving = false
+    if (enemy.glideTo !== undefined) {   // fase 2.1: o drone entra voando pela lateral antes de atacar
+      const step = Math.sign(enemy.glideTo - enemy.x) * 150 * dt
+      enemy.moving = true
+      enemy.face = Math.sign(step) || enemy.face
+      if (Math.abs(enemy.glideTo - enemy.x) <= Math.abs(step)) { enemy.x = enemy.glideTo; enemy.glideTo = undefined }
+      else enemy.x += step
+      continue
+    }
     if (Math.abs(distance) > config.reach) {
       if (eliteDrone) enemy.burst = 0
       continue
@@ -1121,7 +1287,7 @@ function updateCombat(dt) {
     if (eliteDrone && enemy.burst > 0) {
       enemy.burstDelay -= dt
       while (enemy.burst > 0 && enemy.burstDelay <= 0) {
-        const [x,y] = enemyMuzzles[enemy.type] || enemyMuzzles.drone
+        const [x,y] = (enemyMuzzles[enemy.type] || enemyMuzzles.drone).map(v => v*charScale)
         enemyShots.push({x:enemy.x + enemy.face*x,y:enemy.y+y,vx:enemy.face*config.shotSpeed,vy:0})
         sfx.play('droneShot', { dx: enemy.x - player.x })
         enemy.burst--
@@ -1143,7 +1309,7 @@ function updateCombat(dt) {
         enemy.burstDelay = 0
       } else {
         enemy.delay = config.interval
-        const [x,y] = enemyMuzzles.drone
+        const [x,y] = enemyMuzzles.drone.map(v => v*charScale)
         enemyShots.push({x:enemy.x + enemy.face*x,y:enemy.y+y,vx:enemy.face*155,vy:36})
       }
     }
@@ -1197,7 +1363,7 @@ function updateCombat(dt) {
     const shot = enemyShots[i]
     shot.x += shot.vx * dt
     shot.y += (shot.vy ?? 0) * dt
-    const contact = Math.abs(shot.x-player.x) < 9 && shot.y >= playerTop && shot.y <= player.y
+    const contact = Math.abs(shot.x-player.x) < 9*charScale && shot.y >= playerTop && shot.y <= player.y
     if (contact || shot.y > height || shot.x < player.x-520 || shot.x > player.x+520) enemyShots.splice(i,1)
     if (contact && hitPlayer()) return
   }
@@ -1241,7 +1407,7 @@ function noise(x,y) {
 function terrain(x,y,w,scroll) {
   const left = x - scroll
   if (left + w < 0 || left > width) return
-  const depth = y > 188 ? height - y + 4 : 16
+  const depth = y > groundY - 36 ? height - y + 4 : 16   // perto do chão vira bloco até o fim da tela
   fill(ctx,'#292039',left,y,w,depth)
   fill(ctx,'#e4afb2',left,y,w,3)
   fill(ctx,'#8f707c',left,y+3,w,4)
@@ -1263,7 +1429,7 @@ function enemyFrame(sheet, frame, x, y, face, hitFlash = false, tint = null) {
   const widthScale = sheet === 'elite' || sheet === 'eliteFall' ? eliteWidthScale : 1
   const spriteScale = sheet === 'drone' ? standardDroneScale : 1
   const droneFacing = sheet === 'heavyDrone' || sheet === 'eliteDroneDeath'
-  ctx.scale((droneFacing ? face : -face) * widthScale * spriteScale,spriteScale)
+  ctx.scale((droneFacing ? face : -face) * widthScale * spriteScale * charScale,spriteScale * charScale)
   const columns = sheet === 'droneDeath' || sheet === 'eliteDroneDeath' ? 6 : sheet === 'patrol' || sheet === 'patrolFall' || sheet === 'elite' || sheet === 'eliteFall' ? 4 : 3
   const sx = (frame%columns)*w
   const sy = Math.floor(frame/columns)*h
@@ -1559,17 +1725,70 @@ function drawPowerUpEffect(scroll,front=false) {
   }
   ctx.restore()
 }
+// Cenário da Fase 2 (assets/fase2, em 2x): camadas em parallax que se repetem (com várias folhas, alterna entre elas).
+// factor = fração do movimento da câmera; y = deslocamento vertical da camada em unidades do mundo.
+const stage2Layers = [
+  { sheets: ['sky2'], factor: .12, y: 0 },
+  { sheets: ['street2'], factor: 1, y: 0 }   // a rua anda com a pista: o Edu pisa no asfalto dela
+]
+// Artes na altura da pista (a Carreta Furação), definidas em fase2.js
+const stage2Props = stageData.props
+function drawStage2Background() {
+  for (const { sheets, factor, y } of stage2Layers) {
+    const w = sprites[sheets[0]].width/pixelScale, h = sprites[sheets[0]].height/pixelScale
+    const offset = Math.round((onTruck ? elapsed*fase21.speed + camera : camera)*factor)   // na 2.1 a rua corre sozinha e ainda anda com a câmera
+    for (let i = Math.floor(offset/w), x = i*w-offset; x < width; i++, x += w)
+      ctx.drawImage(sprites[sheets[i%sheets.length]],x,y,w,h)
+  }
+  if (onTruck) {   // daqui em diante tudo balança com a carreta; só o cenário ao fundo fica parado
+    ctx.save()
+    ctx.translate(0,suspension.offset)
+  }
+  for (const { sheet, x, y, factor, flip } of stage2Props) {
+    const w = sprites[sheet].width/pixelScale, h = sprites[sheet].height/pixelScale
+    const left = Math.round(x-camera*factor)
+    if (left >= width || left+w <= 0) continue
+    if (!flip) ctx.drawImage(sprites[sheet],left,y-h,w,h)
+    else {   // carro virado para a esquerda
+      ctx.save()
+      ctx.translate(left+w,0)
+      ctx.scale(-1,1)
+      ctx.drawImage(sprites[sheet],0,y-h,w,h)
+      ctx.restore()
+    }
+  }
+  if (onTruck) drawTruckWheels()
+}
+// Fase 2.1: gira o miolo de cada roda sobre a arte da carreta (a arte original fica por baixo, parada)
+function drawTruckWheels() {
+  const truck = stage2Props.find(p => p.sheet === 'truck')
+  const h = sprites.truck.height / pixelScale
+  const left = Math.round(truck.x - camera * truck.factor), top = truck.y - h
+  const angle = elapsed * fase21.wheelSpin
+  fase21.wheels.forEach((wheel, i) => {
+    const image = sprites['wheel' + (i + 1)]
+    const half = wheel.size / pixelScale / 2
+    ctx.save()
+    ctx.translate(left + (wheel.cx + .5) / pixelScale, top + (wheel.cy + .5) / pixelScale)
+    ctx.rotate(angle)
+    ctx.drawImage(image, -half, -half, half * 2, half * 2)
+    ctx.restore()
+  })
+}
 function renderWorld() {
   const scroll = Math.round(camera)
-  const bgWidth = Math.round(height * sprites.bg.width / sprites.bg.height)
-  const scaledWidth = Math.max(640,bgWidth)
-  const shift = Math.round(42 + camera/(end+50-width)*(scaledWidth-width-42))
-  ctx.drawImage(sprites.bg,-shift,0,scaledWidth,height)
-  drawSmoke(shift)
-  for (const [x,y,w] of platforms) terrain(x,y,w,scroll)
+  if (stage === 2) drawStage2Background()
+  else {
+    const bgWidth = Math.round(height * sprites.bg.width / sprites.bg.height)
+    const scaledWidth = Math.max(640,bgWidth)
+    const shift = Math.round(42 + camera/(end+50-width)*(scaledWidth-width-42))
+    ctx.drawImage(sprites.bg,-shift,0,scaledWidth,height)
+    drawSmoke(shift)
+  }
+  for (const [x,y,w,invisible] of platforms) if (!invisible) terrain(x,y,w,scroll)
   for (const m of movers) drawMover(m,scroll)
-  for (const checkpoint of checkpoints) marker(checkpoint,224,scroll,false,respawnX>=checkpoint)
-  marker(goal,224,scroll,true,finish)
+  for (const checkpoint of checkpoints) marker(checkpoint,groundY,scroll,false,respawnX>=checkpoint)
+  marker(goal,groundY,scroll,true,finish)
   for (const pickup of pickups) {
     const px = pickup.x-scroll
     if (pickup.taken || px < -20 || px > width+20) continue
@@ -1611,6 +1830,7 @@ function renderWorld() {
   ctx.restore()
   gameFx.draw(ctx,scroll)   // clarão do cano, faíscas e brilho de medalha (pixelfx)
   drawPowerUpEffect(scroll,true)
+  if (onTruck) ctx.restore()
 }
 // Gestos sutis do retrato enquanto o Edu está ileso: [rosto, duração em ms]
 const idleGestures = [
@@ -1676,7 +1896,14 @@ function tick(now) {
 Promise.all([
   ...Object.entries(sequences).map(([name, { file }]) => loadImage(name,'assets/' + file)),
   loadImage('crouch','assets/edu-v2/agachamento.png'),
-  loadImage('bg','assets/cidade.webp'),
+  ...(stage === 2 ? [
+    // faixas sem emenda montadas por tools/montar_fase2.py
+    loadImage('sky2','assets/fase2/ceu-predios-continuo.webp'),
+    loadImage('street2','assets/fase2/rua-t9-continua.webp'),
+    loadImage('truck','assets/fase2/carreta-furacao.webp'),
+    ...fase2.carSheets.map(([sheet, file]) => loadImage(sheet,'assets/fase2/carros/' + file)),
+    ...(onTruck ? fase21.wheels.map((wheel, i) => loadImage('wheel' + (i + 1),'assets/fase2/rodas/' + wheel.file)) : [])
+  ] : [loadImage('bg','assets/cidade.webp')]),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
   loadImage('patrolFall','assets/patrulheiro-ex-queda.png'),
   loadImage('elite','assets/soldado-elite-movimento.png'),
@@ -1693,7 +1920,9 @@ Promise.all([
   if (new URLSearchParams(location.search).has('debug')) {
     const debugParams = new URLSearchParams(location.search)
     window.bulletz = {
-      player, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms,
+      player, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms, waveState, suspension,
+      get finish() { return finish },
+      get camera() { return camera },
       get lives() { return lives }, set lives(v) { lives = v },
       get god() { return invulnerability > 1e5 }, set god(v) { invulnerability = v ? 1e9 : 0 },
       warp(x) { respawnX = x; reset(false); respawnX = Math.max(...[70, ...checkpoints].filter(c => c <= x)) }
