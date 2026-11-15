@@ -51,6 +51,17 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 @keyframes logo-in{from{opacity:0;transform:scale(.92)}}
 @media(prefers-reduced-motion:reduce){.title-logo,.title-screen .start-button{animation:none}}
 
+/* Fim de jogo: a cena escurece e o título entra batendo (pixel a pixel, em passos), com um clarão e um tremor; depois surge o botão */
+.gameover{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(14px,3cqw,40px);background:#05030a8c;text-align:center;animation:go-dim .6s ease-out both}
+.gameover-title{width:min(62cqw,780px);height:auto;filter:drop-shadow(0 0 28px #ff5a2a66);image-rendering:pixelated;animation:go-slam .9s steps(9,end) both,go-shake .35s .75s linear 2}
+.gameover .start-button{animation:go-button .5s 1.5s steps(5,end) both,pulse 1.2s 2s ease-in-out infinite;pointer-events:none}
+.gameover.ready .start-button{pointer-events:auto}
+@keyframes go-dim{from{background:#05030a00}}
+@keyframes go-slam{0%{opacity:0;transform:scale(3.2);filter:brightness(4) blur(6px)}55%{opacity:1;transform:scale(.94);filter:brightness(2.4) drop-shadow(0 0 40px #ffb25a)}100%{transform:scale(1);filter:brightness(1) drop-shadow(0 0 28px #ff5a2a66)}}
+@keyframes go-shake{25%{transform:translate(-6px,3px)}50%{transform:translate(5px,-3px)}75%{transform:translate(-3px,2px)}}
+@keyframes go-button{from{opacity:0;transform:translateY(14px)}}
+@media(prefers-reduced-motion:reduce){.gameover,.gameover-title,.gameover .start-button{animation:none}}
+
 /* Menu de pausa */
 .menu{display:grid;place-items:center;background:#07030ccc;backdrop-filter:blur(3px);padding:clamp(8px,2cqw,28px)}
 .menu-panel{width:min(640px,100%);max-height:100%;overflow:auto;background:var(--panel);border:1px solid var(--line);box-shadow:0 18px 44px #000a;padding:16px 18px;font-size:14px}

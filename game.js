@@ -471,6 +471,7 @@ function reset(all = true) {
     resetSuspension()
     resetEnding()
     outSeq = null
+    hideGameOver()
   }
   invulnerability = .9
   enemyShots.length = 0
@@ -590,6 +591,8 @@ function updateStageOut(dt) {
     const params = new URLSearchParams(location.search)
     params.set('fase', nextStage[onTruck ? '2.1' : String(stage)])
     params.delete('fim')
+    // a próxima fase começa sozinha, sem passar pela tela inicial (e volta à tela cheia no primeiro toque, se estava)
+    try { sessionStorage.setItem('bulletz.autostart', document.fullscreenElement ? 'fs' : '1') } catch {}
     location.href = location.pathname + '?' + params.toString()
   }
 }
@@ -683,6 +686,7 @@ function setMode(next) {
   document.body.dataset.mode = next
   titleScreen.hidden = next !== 'title'
   menuScreen.hidden = next !== 'menu'
+  if (next === 'title') hideGameOver()
   keys.clear()
   jumpPressed = false
 }
@@ -1203,6 +1207,18 @@ function hitPlayer() {
   return true
 }
 
+// Fim de jogo: escurece a cena e mostra o título animado com o botão de reiniciar (ele fica ativo quando aparece)
+const gameOverScreen = select('#gameover')
+const gameOverButton = select('#gameover-restart')
+function showGameOver() {
+  gameOverScreen.classList.remove('ready')
+  gameOverScreen.hidden = false
+  const title = gameOverScreen.querySelector('.gameover-title')
+  title.style.animation = 'none'; void title.offsetWidth; title.style.animation = ''   // recomeça a animação
+  setTimeout(() => { gameOverScreen.classList.add('ready'); if (!gameOverScreen.hidden) gameOverButton.focus() }, 1500)
+}
+function hideGameOver() { gameOverScreen.hidden = true; gameOverScreen.classList.remove('ready') }
+gameOverButton.onclick = () => { reset(true); game.focus() }
 function loseLife() {
   lives--
   shots.length = 0
@@ -1229,7 +1245,7 @@ function updatePlayerFall(dt) {
 function completePlayerFall() {
   if (lives === 0) {
     playerFall.age = fallDuration
-    announce('FIM DE JOGO · REINICIAR PARA TENTAR DE NOVO', Infinity)
+    showGameOver()
     return
   }
   reset(false)
@@ -2403,6 +2419,16 @@ Promise.all([
   loadImage('medal','assets/medalha-bulletz.png')
 ]).then(() => {
   updateMovers()
+  let autostart = null
+  try { autostart = sessionStorage.getItem('bulletz.autostart'); sessionStorage.removeItem('bulletz.autostart') } catch {}
+  if (autostart) {
+    startGame()
+    if (autostart === 'fs') {
+      const back = () => { enterFullscreen(); window.removeEventListener('pointerdown', back, true); window.removeEventListener('keydown', back, true) }
+      window.addEventListener('pointerdown', back, true)
+      window.addEventListener('keydown', back, true)
+    }
+  }
   // Abra com ?debug para testar: bulletz.warp(x) teleporta o Edu, bulletz.god = true ignora dano
   if (new URLSearchParams(location.search).has('debug')) {
     const debugParams = new URLSearchParams(location.search)
