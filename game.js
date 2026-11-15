@@ -2494,6 +2494,13 @@ Promise.all([
   if (!autostart && !onTruck && stage === 1) { try { sessionStorage.removeItem('bulletz.continues') } catch {} }   // partida nova: 3 continues
   if (autostart) {
     startGame()
+    // a tela preta segura um instante (para as imagens e o primeiro quadro estarem prontos) e então some devagar
+    const root = document.documentElement
+    const wait = Math.max(0, 600 - performance.now())
+    setTimeout(() => {
+      root.classList.replace('stage-loading', 'stage-reveal')
+      setTimeout(() => root.classList.remove('stage-reveal'), 900)
+    }, wait)
     if (autostart === 'fs') {
       const back = () => { enterFullscreen(); window.removeEventListener('pointerdown', back, true); window.removeEventListener('keydown', back, true) }
       window.addEventListener('pointerdown', back, true)

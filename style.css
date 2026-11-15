@@ -143,3 +143,8 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 .gameover .start-button.art-btn{width:clamp(120px,30cqw,300px);animation:go-button .5s 1.5s steps(5,end) both,art-pulse 1.2s 2s ease-in-out infinite}
 @keyframes art-pulse{50%{filter:brightness(1.12) drop-shadow(0 0 12px #ffb25a99)}}
 @media(prefers-reduced-motion:reduce){.title-screen .start-button.art-btn,.gameover .start-button.art-btn{animation:none}}
+
+/* Troca de fase: a nova página abre toda preta (sem mostrar a tela inicial), carrega e só então revela o jogo */
+html.stage-loading body::after,html.stage-reveal body::after{content:"";position:fixed;inset:0;z-index:1000;background:#050408;pointer-events:none}
+html.stage-reveal body::after{animation:stage-reveal .8s ease-out forwards}
+@keyframes stage-reveal{to{opacity:0}}
