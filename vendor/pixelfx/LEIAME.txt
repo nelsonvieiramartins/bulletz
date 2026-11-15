@@ -9,3 +9,5 @@ Modificação local: src/fx/projectiles/muzzle-smg.js ganhou a opção casingFlo
 - src/fx/melee/thrust.js: nova opção `star` (padrão 24) com o tamanho da estrela da ponta; usada no vulto da faca do Fofão.
 - src/fx/melee/heavy-cleave.js: nova opção `slamOnly` (padrão false): só a pancada no chão, centrada no ponto dado; usada na marreta do Chapolim.
 - src/fx/ui/combo-counter.js: novas opções `text` (palavra grande no lugar do "x5") e `hold` (tempo parado antes de sair), mais as letras Á e Í; usado em "ESTÁGIO CONCLUÍDO".
+
+- heavy-cleave: opcao `burst` (so o clarao do final, sem chao); usada em gamefx.tip na ponta da faca do Fofao.

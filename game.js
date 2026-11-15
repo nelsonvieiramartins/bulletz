@@ -328,6 +328,11 @@ phaseSelect.onchange = () => {
   const query = params.toString()
   location.href = location.pathname + (query ? '?' + query : '')
 }
+// Na versão do jogo os atalhos de fase ficam escondidos; aparecem só com ?debug (as fases se encadeiam sozinhas)
+if (!new URLSearchParams(location.search).has('debug')) {
+  document.querySelector('.title-links')?.remove()
+  document.querySelector('.phase-pick')?.remove()
+}
 const musicToggle = select('#music-toggle')
 const musicVolume = select('#music-volume')
 let musicEnabled = true
@@ -353,6 +358,16 @@ musicToggle.onclick = () => {
   else music.pause()
 }
 musicVolume.oninput = () => { music.volume = Number(musicVolume.value) / 100 }
+
+// volume dos efeitos sonoros (lembrado entre sessões); ao soltar o controle toca um golpe para o jogador ouvir o nível
+const sfxVolumeInput = select('#sfx-volume')
+try { const saved = localStorage.getItem('bulletz.sfxVolume'); if (saved !== null) sfxVolumeInput.value = saved } catch {}
+sfx.level = Number(sfxVolumeInput.value) / 100
+sfxVolumeInput.oninput = () => {
+  sfx.level = Number(sfxVolumeInput.value) / 100
+  try { localStorage.setItem('bulletz.sfxVolume', sfxVolumeInput.value) } catch {}
+}
+sfxVolumeInput.onchange = () => sfx.play('heavyBlast')
 
 function unlockMusic(event) {
   if (event.target.closest?.('#music-controls')) return
@@ -455,6 +470,7 @@ function reset(all = true) {
     resetWaves()
     resetSuspension()
     resetEnding()
+    outSeq = null
   }
   invulnerability = .9
   enemyShots.length = 0
@@ -557,6 +573,25 @@ const ending = {
   doorOnScreen: 440,  // onde a porta fica na tela quando a carreta para (logo à frente do nariz da cabine, com a câmera no fim)
   bannerAt: 2.7,      // s de faixa até a tela começar a fechar
   wipeEnd: 2.75       // s de transição até voltar à tela inicial
+}
+// Fim das fases 1 e 2: depois de uma pausa, "ESTÁGIO CONCLUÍDO" e a tela fecha em cacos de vidro; então abre a fase seguinte
+// (1 -> 2 -> 2.1), que começa na tela inicial. A recarga da página mantém o resto da URL (?debug etc.).
+let outSeq = null
+const nextStage = { '1': '2', '2': '2.1' }
+const stageOut = { pause: 1.4, bannerAt: 2.7, wipeEnd: 2.75 }
+function updateStageOut(dt) {
+  const s = outSeq
+  s.t += dt
+  gameFx.update(dt)   // a fase já parou (finish): o update normal não chega até o fim, então os efeitos andam aqui
+  if (!s.banner && s.t >= stageOut.pause) { s.banner = true; s.t = 0; gameFx.banner(); sfx.play('victory') }
+  else if (s.banner && !s.wiped && s.t >= stageOut.bannerAt) { s.wiped = true; gameFx.startWipe() }
+  else if (s.wiped && gameFx.wipeTime >= stageOut.wipeEnd) {
+    outSeq = null
+    const params = new URLSearchParams(location.search)
+    params.set('fase', nextStage[onTruck ? '2.1' : String(stage)])
+    params.delete('fim')
+    location.href = location.pathname + '?' + params.toString()
+  }
 }
 function startEnding() {
   const v0 = roadSpeed
@@ -948,6 +983,7 @@ function update(dt) {
   elapsed += dt
   if (testEnding && !finish && !endSeq) { finish = true; startEnding() }
   updateMovers()
+  if (outSeq) updateStageOut(dt)
   if (onTruck) {
     if (endSeq) updateEnding(dt)
     roadPos += roadSpeed * dt
@@ -1053,8 +1089,7 @@ function update(dt) {
   }
   if (player.x >= goal && boss.hp === 0 && !finish && player.grounded) {
     finish = true
-    announce(stage === 2 ? fase2.victory : 'CIDADE LIBERTADA',6)
-    sfx.play('victory')
+    outSeq = { t: 0, banner: false, wiped: false }
   }
   if (player.grounded && Math.abs(player.vx) > 8) {
     player.phase = (player.phase + Math.abs(player.vx) * dt / 12) % 8
@@ -1132,7 +1167,7 @@ function playDeathSound(gameOver = false) {
   const source = soundContext.createBufferSource()
   const gain = soundContext.createGain()
   source.buffer = buffer
-  gain.gain.value = deathSoundVolume
+  gain.gain.value = deathSoundVolume * sfx.level
   source.connect(gain).connect(soundContext.destination)
   source.start()
 }
@@ -1148,7 +1183,7 @@ function playSoldierDeathSound(dx = 0) {
   const gain = soundContext.createGain()
   source.buffer = deathGruntSound
   source.playbackRate.value = soldierDeathPitch * (.97 + Math.random() * .06)
-  gain.gain.value = deathSoundVolume * .8 * near
+  gain.gain.value = deathSoundVolume * sfx.level * .8 * near
   source.connect(gain).connect(soundContext.destination)
   source.start()
 }
@@ -1451,7 +1486,11 @@ function updateMelee(enemy, distance, config, dt) {
     enemy.attackAge += dt
     // vulto da faca no instante da estocada (o efeito dura uns .3 s, então acompanha o quadro de estocada)
     if (enemy.type === 'fofao' && before < config.windup && enemy.attackAge >= config.windup)
+    {
       gameFx.stab({ x: enemy.x, floor: enemy.y, flip: enemy.face < 0, reach: 16 * charScale, lift: 17 * charScale })
+      // final do 3º golpe do sword-combo, pequeno, na ponta da faca quando a estocada chega
+      gameFx.tip({ x: enemy.x + enemy.face * (9 + 16 * charScale), y: enemy.y - 17 * charScale - 20, flip: enemy.face < 0, delay: .07 })
+    }
     // nunca fica parado: avança devagar no preparo, dá um bote na estocada e recua um pouco depois
     const creep = enemy.attackAge < config.windup ? enemy.face*30 : enemy.attackAge < config.windup + config.slash ? enemy.face*110 : -enemy.face*35
     enemy.vx += clamp(creep - enemy.vx, -1400*dt, 1400*dt)
@@ -2006,7 +2045,7 @@ function render() {
   ctx.save()
   ctx.scale(pixelScale,pixelScale)
   renderWorld()
-  if (endSeq && endSeq.wiped) {   // a tela fecha: vidro por cima; quando ele estoura, por baixo só há escuro
+  if ((endSeq && endSeq.wiped) || (outSeq && outSeq.wiped)) {   // a tela fecha: vidro por cima; quando ele estoura, por baixo só há escuro
     if (gameFx.wipeTime > 1.5) { ctx.fillStyle = '#050408'; ctx.fillRect(0,0,width,height) }
     gameFx.drawWipe(ctx,width,height)
   }
@@ -2371,6 +2410,8 @@ Promise.all([
       player, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms, waveState, suspension,
       get finish() { return finish },
       get endSeq() { return endSeq },
+      get outSeq() { return outSeq },
+      endStage() { finish = true; outSeq = { t: 0, banner: false, wiped: false } },
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },
       get lives() { return lives }, set lives(v) { lives = v },

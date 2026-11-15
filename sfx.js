@@ -24,6 +24,7 @@ const sounds = {
 
 let context = null
 let master = null
+let level = 1                // controle do jogador (0 a 1), multiplica o volume geral
 const buffers = {}
 const lastPlayed = {}
 
@@ -43,10 +44,13 @@ export const sfx = {
     if (context || !audioContext) return
     context = audioContext
     master = context.createGain()
-    master.gain.value = sfxVolume
+    master.gain.value = sfxVolume * level
     master.connect(context.destination)
     Object.keys(sounds).forEach(load)
   },
+  /** Volume dos efeitos escolhido pelo jogador, de 0 a 1 (vale também para os sons tocados fora deste módulo, via level). */
+  get level() { return level },
+  set level(v) { level = Math.max(0, Math.min(1, v)); if (master) master.gain.value = sfxVolume * level },
   play(name, { dx = 0, volume = 1 } = {}) {
     const def = sounds[name]
     const buffer = buffers[name]

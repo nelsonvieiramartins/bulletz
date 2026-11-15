@@ -19,6 +19,7 @@ export const meta = {
     palette: ["#2a0c10", "#5c1414", "#a3241a", "#e0481c", "#ff8a2a", "#ffc23d", "#fff0a0", "#ffffff"],
     stone: "#4a3f69",
     seed: 5,
+    burst: false, // só o clarão do final (estrela, estilhaços, faíscas e brasas), sem chão: rachaduras, poeira, pedras e abalo ficam de fora; usar com slamOnly
     slamOnly: false, // só a pancada no chão (estrela, rachaduras, poeira e o abalo), centrada no ponto dado; começa já no impacto
   },
 };
@@ -52,7 +53,7 @@ const head = (t) => ease.inQuad(clamp((t - RAISE) / SWING)); // fraction of the 
 const passedAt = (f) => RAISE + SWING * Math.sqrt(clamp(f)); // when the edge passed fraction f
 
 export function create(o) {
-  const C = fit(o.palette, 8), n = C.length, R = new Rng(o.seed), st = stone(o.stone), floor = () => 0;
+  const C = fit(o.palette, 8), n = C.length, R = new Rng(o.seed), st = stone(o.stone), floor = () => (o.burst ? 90 : 0);
   const ps = new Particles({ rng: R, ground: floor, sparks: [C[6], C[5], C[4], C[3]] }), bits = new Bits({ ground: floor }), lights = new Lights();
   // the arc: from behind the head, over the top, down into the floor in front
   const A = swing({ cx: 3, cy: -22, R: 37, sy: 0.88, rot: 0.32, a0: -2.45, dir: 1 });
@@ -60,7 +61,7 @@ export function create(o) {
   while (onSwing(A, A.R, U1)[1] < -0.5 && U1 < 4) U1 += 0.005;
   const E = { ...A, R: A.R * 0.76 }, W = 16, WE = 5;
   const X = o.slamOnly ? 0 : onSwing(A, A.R - 2, U1)[0], GLINT = onSwing(A, A.R - 3, 0);
-  const lines = cracks(R, X, 4, 40, 7, 0.4);
+  const lines = o.burst ? [] : cracks(R, X, 4, 40, 7, 0.4);
   // the impact star: long spikes along the floor, shorter ones up
   const spikes = [-Math.PI, -2.7, -2.15, -1.62, -1.05, -0.45, 0].map((a, i) => ({ a: a + R.range(-0.08, 0.08), len: (i === 0 || i === 6 ? 20 : i === 3 ? 15 : 9) + R.range(0, 4), w: 1.6 + R.range(0, 0.6) }));
   const shards = [-2.5, -1.9, -1.2, -0.6].map((a) => ({ a: a + R.range(-0.15, 0.15), r: 8 + R.range(0, 3), v: R.range(80, 130), arc: R.range(0.35, 0.6) }));
@@ -101,11 +102,12 @@ export function create(o) {
         lights.add(X, -6, 26, WHITE, 0.9, 0.1);
         lights.add(X, -12, 64, C[4], 0.5, 0.8);
         // sparks fan up off the floor, most of them forward
-        for (let i = 0; i < 26; i++) {
+        for (let i = 0; i < (o.burst ? 16 : 26); i++) {
           const a = -Math.PI / 2 + R.range(-1.2, 1.35), sp = R.range(140, 360);
           ps.spawn(P.SPARK, X, -1, Math.cos(a) * sp, Math.sin(a) * sp - 40, R.range(0.15, 0.5));
         }
         // dust rolls out both ways along the floor
+        if (!o.burst) {
         for (let i = 0; i < 20; i++) {
           const s = i % 2 ? -1 : 1;
           ps.spawn(P.SMOKE, X + s * R.range(0, 8), -R.range(2, 6), s * R.range(45, 135), -R.range(2, 12), R.range(1.0, 1.45), st.dust, R.range(5, 8.5), R.range(0, 0.07), PF.BIG);
@@ -119,11 +121,12 @@ export function create(o) {
         }
         for (let i = 0; i < 6; i++)
           bits.add({ kind: B.CHUNK, x: X + R.range(-3, 3), y: -2, vx: R.range(-50, 110), vy: -R.range(120, 260), g: 1, drag: 0.4, bounce: 0.3, life: R.range(1.15, 1.5), a: R.range(0, TAU), va: R.range(-14, 14), s: R.int(1, 2) });
+        }
         // embers lift off the cut
-        for (let i = 0; i < 16; i++) ps.spawn(P.EMBER, X + R.range(-8, 8), -R.range(1, 6), R.range(-50, 60), -R.range(30, 110), R.range(0.7, 1.5), C[4], R.range(1, 2));
+        for (let i = 0; i < (o.burst ? 6 : 16); i++) ps.spawn(P.EMBER, X + R.range(-8, 8), -R.range(1, 6), R.range(-50, 60), -R.range(30, 110), R.range(0.7, 1.5), C[4], R.range(1, 2));
       }
       // the cracks breathe embers while they're hot
-      if (hit && t < HIT + 0.6 && R.chance(0.12)) {
+      if (hit && !o.burst && t < HIT + 0.6 && R.chance(0.12)) {
         const c = R.pick(lines), pt = R.pick(c.pts);
         ps.spawn(P.EMBER, pt[0], pt[1] - 1, R.range(-12, 12), -R.range(20, 50), R.range(0.5, 0.9), C[4], 1);
       }
@@ -138,7 +141,7 @@ export function create(o) {
     },
     drawBack(p) {
       const q = t - HIT;
-      if (q >= 0) {
+      if (q >= 0 && !o.burst) {
         // the floor under the blade: white hot, cooling through the ramp to soot
         const fade = 1 - smooth(1.0, 1.5, q);
         for (let y = 0; y <= 2; y++)
@@ -163,7 +166,7 @@ export function create(o) {
         sparkle(p, GLINT[0], GLINT[1], 1 + 7 * g, C[6], C[4], 0.5);
         p.glow(GLINT[0], GLINT[1], 22, C[4], 0.3 * g);
       }
-      if (q >= 0) {
+      if (q >= 0 && !o.burst) {
         // cracks race out from the cut and split down into the floor: white hot, cooling down the ramp to dark
         const heat = Math.pow(clamp(1 - q / 1.2), 1.2), fade = 1 - smooth(1.15, 1.5, q);
         for (const c of lines) {

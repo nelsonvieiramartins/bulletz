@@ -43,6 +43,9 @@ export function createGameFx(width, height) {
   const wipeImage = wipeContext.createImageData(320, 180)
   let wipe = null
   const bannerHold = 2
+  // quadro de trabalho do clarão da ponta da faca (tamanho cheio; origem do efeito em tipOrigin)
+  const tipFrame = createFrame(200, 150)
+  const tipOrigin = [100, 100]
 
   return {
     /** Faísca onde o tiro acertou. x,y = ponto do acerto; floor = pés do alvo; dx = direção do tiro (1 ou -1). */
@@ -59,6 +62,33 @@ export function createGameFx(width, height) {
     /** Vulto da estocada (thrust): feixe de riscos da mão até a ponta da faca. x = pés do atacante, floor = chão, lift = altura extra da faca. */
     stab({ x, floor, flip, reach = 16, lift = 0 }) {
       oneShots.push(createFx(thrust, { x, y: floor - lift, flip, seed: seed(), reach, star: 9, palette: stabPalette }))
+      if (oneShots.length > maxOneShots) oneShots.shift()
+    },
+    /** Final do 3º golpe do sword-combo (heavy-cleave, só o clarão) na ponta da faca, em escala menor, depois de delay s. */
+    tip({ x, y, flip, scale = .42, delay = 0 }) {
+      const inner = createFx(heavyCleave, { x: tipOrigin[0], y: tipOrigin[1], flip, seed: seed(), slamOnly: true, burst: true })
+      let wait = delay
+      oneShots.push({
+        update(dt) { if (wait > 0) wait -= dt; else inner.update(dt) },
+        done() { return wait <= 0 && inner.done() },
+        draw(f, layer) {
+          if (layer !== 'front' || wait > 0) return
+          clearFrame(tipFrame)
+          inner.draw(tipFrame, 'back')
+          inner.draw(tipFrame, 'front')
+          const reach = Math.ceil(tipOrigin[0] * scale)
+          for (let dy = -Math.ceil(tipOrigin[1] * scale); dy <= Math.ceil((tipFrame.h - tipOrigin[1]) * scale); dy++)
+            for (let dx = -reach; dx <= reach; dx++) {
+              const sx = Math.round(tipOrigin[0] + dx / scale), sy = Math.round(tipOrigin[1] + dy / scale)
+              if (sx < 0 || sy < 0 || sx >= tipFrame.w || sy >= tipFrame.h) continue
+              const px = Math.round(x) + dx - f.ox, py = Math.round(y) + dy - f.oy
+              if (px < 0 || py < 0 || px >= f.w || py >= f.h) continue
+              const c = tipFrame.color[sy * tipFrame.w + sx], l = tipFrame.light[sy * tipFrame.w + sx]
+              if (c) f.color[py * f.w + px] = c
+              if (l & 0xffffff) f.light[py * f.w + px] = l
+            }
+        }
+      })
       if (oneShots.length > maxOneShots) oneShots.shift()
     },
     /** Pancada da marreta no chão (3º golpe do sword-combo = heavy-cleave, só a pancada): estrela, rachaduras, poeira e o abalo sísmico (anel de 52 unidades). */
