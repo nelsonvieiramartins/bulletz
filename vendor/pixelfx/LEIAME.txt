@@ -1,0 +1,5 @@
+# pixelfx (cópia local)
+
+Copiado de https://github.com/patch-gg/pixelfx (commit 5294518, 2026-11-12), licença MIT (ver LICENSE e NOTICE.md).
+Só o código em src/ e a documentação; sem tools, gallery nem a fonte Patch Pixel.
+Amostras de todos os efeitos: efeitos.html na raiz do projeto.

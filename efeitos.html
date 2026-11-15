@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BULLETZ · Amostras de efeitos</title>
+<style>
+  :root { --bg:#14101c; --panel:#1f1830; --line:#3a2f52; --text:#ece4f6; --dim:#9a8db4; --accent:#ffb347; --stage:#2b2540; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:rgba(20,16,28,.96); backdrop-filter:blur(6px); border-bottom:1px solid var(--line); padding:12px 20px; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; }
+  header h1 { margin:0; font-size:16px; color:var(--accent); letter-spacing:.5px; }
+  header small { color:var(--dim); }
+  input[type=search] { background:#2e2447; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 10px; font:inherit; width:220px; }
+  select { background:#2e2447; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
+  .chip { background:#2a2140; color:var(--dim); border:1px solid var(--line); border-radius:99px; padding:3px 11px; font:inherit; font-size:12px; cursor:pointer; }
+  .chip:hover { border-color:var(--accent); color:var(--text); }
+  .chip.on { background:var(--accent); color:#1a1226; border-color:var(--accent); font-weight:600; }
+  .back { margin-left:auto; color:var(--accent); text-decoration:none; font-size:13px; }
+  main { padding:8px 20px 60px; }
+  section h2 { margin:26px 0 2px; font-size:17px; }
+  section p { margin:0 0 12px; color:var(--dim); font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
+  figure { margin:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; cursor:pointer; transition:border-color .15s; }
+  figure:hover, figure:focus-visible { border-color:var(--accent); outline:none; }
+  figure.big { grid-column:span 2; }
+  .stage { aspect-ratio:16/10; background:var(--stage); display:grid; place-items:center; }
+  .stage canvas { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
+  figcaption { padding:7px 10px; display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  figcaption b { font-size:13px; }
+  figcaption small { color:var(--dim); font-size:11px; white-space:nowrap; }
+  .star { color:var(--accent); }
+  .empty { padding:40px; text-align:center; color:var(--dim); }
+  /* visualização grande */
+  dialog { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:0; width:min(960px,96vw); max-height:94vh; overflow:auto; }
+  dialog::backdrop { background:rgba(8,6,14,.8); }
+  .dhead { display:flex; align-items:baseline; gap:12px; padding:14px 18px 6px; flex-wrap:wrap; }
+  .dhead h3 { margin:0; font-size:18px; }
+  .dhead span { color:var(--dim); font-size:12px; }
+  .dhead button { margin-left:auto; }
+  .desc { padding:0 18px 10px; color:var(--dim); font-size:13px; }
+  #view { background:var(--stage); display:grid; place-items:center; margin:0 18px; border-radius:8px; border:1px solid var(--line); min-height:300px; overflow:auto; }
+  #view canvas { image-rendering:pixelated; max-width:100%; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; padding:12px 18px; }
+  .bar label { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
+  .bar input[type=range] { width:100px; accent-color:var(--accent); }
+  button.b { background:#2e2447; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  button.b:hover { border-color:var(--accent); }
+  button.b.on { background:var(--accent); color:#1a1226; border-color:var(--accent); font-weight:600; }
+  .tags { padding:0 18px 4px; display:flex; flex-wrap:wrap; gap:5px; }
+  .tags span { background:#2a2140; border-radius:4px; padding:1px 7px; font-size:11px; color:var(--dim); }
+  pre { margin:8px 18px 18px; padding:10px 12px; background:#17122a; border:1px solid var(--line); border-radius:8px; font-size:12px; overflow:auto; color:#cfc4e6; }
+  @media (max-width:600px) { figure.big { grid-column:span 1; } header { padding:10px 14px; } main { padding:8px 14px 60px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>BULLETZ · AMOSTRAS DE EFEITOS</h1>
+  <small id="count"></small>
+  <input type="search" id="q" placeholder="Buscar (ex.: explosão, moeda, fogo)…" aria-label="Buscar efeito">
+  <label><small>Fundo</small>
+    <select id="bg">
+      <option value="city">Cidade do jogo</option>
+      <option value="dark">Escuro</option>
+      <option value="ground">Chão de pedra</option>
+      <option value="sky">Céu noturno</option>
+      <option value="black">Preto</option>
+      <option value="light">Claro</option>
+      <option value="none">Transparente</option>
+    </select>
+  </label>
+  <a class="back" href="index.html">← voltar ao jogo</a>
+  <div class="chips" id="chips"></div>
+</header>
+<main id="grid"></main>
+
+<dialog id="dlg">
+  <div class="dhead"><h3 id="dtitle"></h3><span id="dmeta"></span><button class="b" id="dclose">Fechar (Esc)</button></div>
+  <div class="desc" id="ddesc"></div>
+  <div id="view"></div>
+  <div class="bar">
+    <button class="b on" id="play">⏸ Pausar</button>
+    <button class="b" id="restart">↺ Reiniciar</button>
+    <label>Velocidade <input type="range" id="speed" min="0.1" max="2" step="0.1" value="1"> <span id="speedv">1×</span></label>
+    <label>Zoom <input type="range" id="zoom" min="1" max="8" step="1" value="3"> <span id="zoomv">3×</span></label>
+    <label>Brilho <input type="range" id="light" min="0" max="2" step="0.1" value="1"> <span id="lightv">1</span></label>
+    <label>Semente <input type="number" id="seed" min="0" max="9999" value="0" style="width:70px;background:#2e2447;color:inherit;border:1px solid var(--line);border-radius:6px;padding:4px"></label>
+    <button class="b" id="flip">Espelhar</button>
+    <button class="b" id="copy">Copiar código</button>
+  </div>
+  <div class="tags" id="dtags"></div>
+  <pre id="code"></pre>
+</dialog>
+
+<script type="module">
+import { effects, categories } from './vendor/pixelfx/src/fx/index.js'
+import { createFrame, clearFrame, createFx, createAct, actBounds, composite, backdrop,
+         drawActor, painterFor, stockActor, actorAlphaOf } from './vendor/pixelfx/src/core/index.js'
+
+const $ = (s) => document.querySelector(s)
+const pt = {
+  moves: ['Golpes', 'ataques completos, da preparação à recuperação'],
+  fire: ['Fogo', 'tochas, sopros, pilares e muros de chamas'],
+  explosions: ['Explosões', 'detonações, fumaça, fogos e cogumelos'],
+  water: ['Água', 'respingos, quedas, fontes e ondas'],
+  ice: ['Gelo', 'espetos, ondas de frio, congelar e estilhaçar'],
+  lightning: ['Raios', 'descargas, arcos, bobinas e tempestades'],
+  scifi: ['Ficção científica', 'hologramas, escudos, scanners e teletransporte'],
+  melee: ['Corpo a corpo', 'cortes, rastros, golpes e combos'],
+  impacts: ['Impactos', 'faíscas de acerto, ondas de choque e pousos'],
+  projectiles: ['Projéteis', 'balas, foguetes, lasers e flechas'],
+  spawn: ['Surgir e morrer', 'fumaças, portais, almas e estilhaços'],
+  arcane: ['Arcano', 'portais, runas, mísseis e raios'],
+  holy: ['Sagrado', 'curas, auréolas e pilares de luz'],
+  shadow: ['Sombra', 'maldições, vazios, tentáculos e almas'],
+  status: ['Estados', 'queimando, congelado, envenenado, dormindo'],
+  nature: ['Natureza', 'veneno, trepadeiras, espinhos e tremores'],
+  weather: ['Clima', 'chuva, neve, névoa e aurora'],
+  ui: ['Interface', 'subir de nível, números, avisos e contagens'],
+  pickups: ['Itens', 'moedas, gemas, baús e poções'],
+  transitions: ['Transições', 'cortinas, íris e dissolvências'],
+  critters: ['Criaturas', 'lesmas, morcegos, fantasmas e sapos']
+}
+// sugestões para o BULLETZ (ignora ids que não existirem)
+const ideias = new Set(['impacts/bullet-impact', 'impacts/hit-spark', 'impacts/hit-flash', 'impacts/ricochet', 'impacts/heavy-landing',
+  'explosions/small-explosion', 'explosions/big-explosion', 'explosions/grenade', 'explosions/smoke-bomb',
+  'projectiles/muzzle-smg', 'projectiles/muzzle-pistol', 'projectiles/bullet-tracer', 'projectiles/rocket', 'projectiles/laser-bolt',
+  'pickups/coin-spin', 'pickups/collect-burst', 'pickups/heart-pickup', 'pickups/power-star', 'pickups/loot-beam',
+  'spawn/poof', 'spawn/shatter-death', 'spawn/respawn-beam', 'spawn/disintegrate', 'ui/level-up', 'ui/damage-number', 'ui/combo-counter',
+  'scifi/glitch', 'scifi/warp-in', 'fire/campfire', 'weather/fog', 'weather/rain', 'critters/bat'])
+
+const list = Object.entries(effects).map(([id, mod]) => ({ id, cat: id.split('/')[0], mod, meta: mod.meta ?? {}, name: mod.meta?.name ?? id }))
+$('#count').textContent = list.length + ' efeitos · biblioteca pixelfx (MIT)'
+
+const cityImg = new Image(); cityImg.src = 'assets/cidade.webp'
+let bgKind = 'city'
+
+function bgBuffer(kind, W, H, groundY) {
+  if (kind === 'none') return null
+  if (kind === 'city') {
+    if (!cityImg.complete || !cityImg.naturalWidth) return backdrop('dark', W, H, groundY)
+    const c = document.createElement('canvas'); c.width = W; c.height = H
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false
+    const s = Math.max(W / cityImg.naturalWidth, H / cityImg.naturalHeight)
+    x.drawImage(cityImg, 0, 0, cityImg.naturalWidth, cityImg.naturalHeight, 0, 0, cityImg.naturalWidth * s, cityImg.naturalHeight * s)
+    const d = x.getImageData(0, 0, W, H).data, out = new Uint32Array(W * H)
+    for (let i = 0; i < out.length; i++) out[i] = (255 << 24) | (d[i*4+2] << 16) | (d[i*4+1] << 8) | d[i*4]
+    return out
+  }
+  return backdrop(kind, W, H, groundY)
+}
+
+// Um "palco": desenha um efeito (ou ato) num canvas, no tamanho certo para ele.
+class Stage {
+  constructor(canvas, entry, { pad = 1.15, aspect = 1.6 } = {}) {
+    Object.assign(this, { canvas, entry, pad, aspect, ctx: canvas.getContext('2d'), playing: true, speed: 1, flip: false, opts: {}, acc: 0, wait: 0, dirty: true })
+    this.layout()
+  }
+  get acted() { return !!this.entry.mod.act }
+  layout() {
+    const m = this.entry.meta
+    const b = this.acted ? { ...actBounds(this.entry.mod) } : null
+    if (b) b.y1 = Math.min(b.y1, 22)
+    const [w, h] = b ? [b.x1 - b.x0, b.y1 - b.y0] : (m.size ?? [160, 120])
+    const [ox, oy] = b ? [-b.x0, -b.y0] : (m.origin ?? [w / 2, h / 2])
+    this.W = Math.ceil(Math.max(w * this.pad, h * this.pad * this.aspect))
+    this.H = Math.ceil(this.W / this.aspect)
+    this.x = Math.floor((this.W - w) / 2) + ox
+    this.y = b ? Math.max(oy + 2, this.H - b.y1 - 2) : Math.floor((this.H - h) / 2) + oy
+    this.canvas.width = this.W; this.canvas.height = this.H
+    this.frame = createFrame(this.W, this.H)
+    this.img = this.ctx.createImageData(this.W, this.H)
+    this.setBg(bgKind)
+    this.restart()
+  }
+  setBg(kind) { this.bgBuf = bgBuffer(kind, this.W, this.H, this.y); this.dirty = true }
+  restart() {
+    const make = this.acted ? createAct : createFx
+    this.inst = make(this.entry.mod, { x: this.x, y: this.y, flip: this.flip, ...this.opts })
+    this.acc = 0; this.wait = 0; this.dirty = true
+  }
+  tick(dt) {
+    const m = this.entry.meta, step = 1 / (m.fps ?? 30)
+    if (this.playing) this.acc = Math.min(this.acc + dt * this.speed, .25)
+    let moved = false
+    while (this.acc >= step) {
+      this.acc -= step
+      const over = this.acted ? this.inst.done() : (!m.loop && this.inst.t >= (m.duration ?? 1))
+      if (!m.loop && over) { this.wait += step; if (this.wait > .5) this.restart() }
+      else this.inst.update(step)
+      moved = true
+    }
+    if (moved || this.dirty) this.render()
+  }
+  render() {
+    const f = clearFrame(this.frame), m = this.entry.meta
+    if (this.acted) {
+      this.inst.draw(f)
+      composite(f, this.img.data, this.bgBuf)
+      const [sx, sy] = this.inst.shake ?? [0, 0]
+      if (sx || sy) this.ctx.clearRect(0, 0, this.W, this.H)
+      this.ctx.putImageData(this.img, sx, sy)
+    } else {
+      this.inst.draw(f, 'back')
+      const tt = m.loop ? this.inst.t % (m.duration ?? 1) : Math.min(this.inst.t, m.duration ?? 1)
+      if (m.actor) drawActor(painterFor(f).place(this.x, this.y, this.flip), this.inst.options.actor ?? stockActor(), actorAlphaOf(this.entry.mod, tt, this.inst.options))
+      this.inst.draw(f, 'front')
+      composite(f, this.img.data, this.bgBuf)
+      this.ctx.putImageData(this.img, 0, 0)
+    }
+    this.dirty = false
+  }
+}
+
+// ---- grade ----
+const tiles = []
+let filterCat = 'all', query = '', onlyIdeas = false
+const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+function buildChips() {
+  const box = $('#chips')
+  const mk = (id, label) => { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.textContent = label; b.onclick = () => { filterCat = id === 'ideias' ? 'all' : id; onlyIdeas = id === 'ideias'; refresh() }; box.append(b) }
+  mk('all', 'Todos'); mk('ideias', '★ Ideias para o BULLETZ')
+  for (const c of categories) mk(c.id, (pt[c.id]?.[0] ?? c.name) + ' · ' + list.filter(e => e.cat === c.id).length)
+}
+function buildGrid() {
+  const main = $('#grid')
+  for (const c of categories) {
+    const items = list.filter(e => e.cat === c.id)
+    if (!items.length) continue
+    const sec = document.createElement('section'); sec.dataset.cat = c.id
+    sec.innerHTML = `<h2>${pt[c.id]?.[0] ?? c.name}</h2><p>${pt[c.id]?.[1] ?? c.blurb}</p><div class="grid"></div>`
+    const grid = sec.querySelector('.grid')
+    for (const e of items) {
+      const fig = document.createElement('figure'); fig.tabIndex = 0
+      const big = e.mod.act || (e.meta.size && (e.meta.size[0] > 220 || e.meta.size[1] > 180))
+      if (big) fig.className = 'big'
+      const star = ideias.has(e.id) ? ' <span class="star" title="Boa ideia para o BULLETZ">★</span>' : ''
+      fig.innerHTML = `<div class="stage"></div><figcaption><b>${e.name}${star}</b><small>${e.meta.loop ? 'loop' : (e.meta.duration ?? 1).toFixed(1) + 's'}</small></figcaption>`
+      fig.onclick = () => openDialog(e)
+      fig.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openDialog(e) } }
+      grid.append(fig)
+      tiles.push({ e, fig, sec, stage: null, visible: false })
+    }
+    main.append(sec)
+  }
+}
+const io = new IntersectionObserver((entries) => {
+  for (const en of entries) {
+    const t = tiles.find(x => x.fig === en.target); if (!t) continue
+    t.visible = en.isIntersecting
+    if (t.visible && !t.stage) {
+      const cv = document.createElement('canvas'); t.fig.querySelector('.stage').append(cv)
+      try { t.stage = new Stage(cv, t.e) } catch (err) { console.warn('Falha em', t.e.id, err); cv.remove() }
+    }
+  }
+}, { rootMargin: '200px' })
+
+function refresh() {
+  const q = norm(query)
+  let any = false
+  for (const t of tiles) {
+    const hay = norm(t.e.name + ' ' + t.e.id + ' ' + (t.e.meta.tags ?? []).join(' ') + ' ' + (pt[t.e.cat]?.[0] ?? ''))
+    const show = (filterCat === 'all' || t.e.cat === filterCat) && (!onlyIdeas || ideias.has(t.e.id)) && (!q || hay.includes(q))
+    t.fig.hidden = !show
+    any ||= show
+  }
+  document.querySelectorAll('section').forEach(s => { s.hidden = ![...s.querySelectorAll('figure')].some(f => !f.hidden) })
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', onlyIdeas ? c.dataset.id === 'ideias' : c.dataset.id === filterCat))
+  let msg = document.querySelector('.empty'); if (msg) msg.remove()
+  if (!any) { msg = document.createElement('div'); msg.className = 'empty'; msg.textContent = 'Nenhum efeito encontrado.'; $('#grid').append(msg) }
+}
+
+// ---- visualização grande ----
+const dlg = $('#dlg'), view = $('#view')
+let big = null, bigEntry = null
+function bigOpts() { return { seed: +$('#seed').value || undefined, light: +$('#light').value } }
+function openDialog(e) {
+  bigEntry = e
+  $('#dtitle').textContent = e.name
+  $('#dmeta').textContent = e.id + ' · ' + (e.meta.loop ? 'em loop' : (e.meta.duration ?? 1).toFixed(2) + ' s') + ' · ' + (e.meta.fps ?? 30) + ' quadros/s'
+  $('#ddesc').textContent = e.meta.desc ?? ''
+  $('#dtags').replaceChildren(...(e.meta.tags ?? []).map(t => Object.assign(document.createElement('span'), { textContent: t })))
+  $('#seed').value = e.meta.options?.seed ?? 0
+  $('#light').value = 1; $('#lightv').textContent = '1'
+  $('#flip').classList.remove('on')
+  $('#code').textContent = codeFor(e)
+  view.replaceChildren()
+  const cv = document.createElement('canvas'); view.append(cv)
+  big = new Stage(cv, e, { pad: 1.1, aspect: 1.6 })
+  big.opts = bigOpts(); big.speed = +$('#speed').value; big.restart()
+  $('#zoom').value = Math.max(1, Math.min(8, Math.floor(860 / big.W)))   // cabe na janela
+  applyZoom()
+  $('#play').textContent = '⏸ Pausar'; $('#play').classList.add('on')
+  if (!dlg.open) dlg.showModal()
+}
+function applyZoom() { const z = +$('#zoom').value; $('#zoomv').textContent = z + '×'; if (big) { big.canvas.style.width = big.W * z + 'px'; big.canvas.style.height = big.H * z + 'px' } }
+function codeFor(e) {
+  const acted = !!e.mod.act, make = acted ? 'createAct' : 'createFx'
+  return [`import { createFrame, clearFrame, ${make}, composite } from './vendor/pixelfx/src/core/index.js'`,
+    `import * as fx from './vendor/pixelfx/src/fx/${e.id}.js'`, '',
+    `const frame = createFrame(480, 270)           // resolução do jogo`,
+    `const efeito = ${make}(fx, { x: 240, y: 224 })  // posição no mundo; também: flip, angle, seed, palette, light`,
+    acted ? `// a cada quadro: efeito.update(dt); efeito.draw(frame)` : `// a cada quadro: efeito.update(dt); efeito.draw(frame, 'back'); …personagens…; efeito.draw(frame, 'front')`,
+    `// depois: composite(frame, imageData.data, null) e ctx.putImageData(imageData, 0, 0)`].join('\n')
+}
+$('#dclose').onclick = () => dlg.close()
+dlg.addEventListener('click', (ev) => { if (ev.target === dlg) dlg.close() })
+dlg.addEventListener('close', () => { big = null })
+$('#play').onclick = () => { if (!big) return; big.playing = !big.playing; $('#play').textContent = big.playing ? '⏸ Pausar' : '▶ Tocar'; $('#play').classList.toggle('on', big.playing) }
+$('#restart').onclick = () => big?.restart()
+$('#speed').oninput = (ev) => { $('#speedv').textContent = ev.target.value + '×'; if (big) big.speed = +ev.target.value }
+$('#zoom').oninput = applyZoom
+$('#light').oninput = (ev) => { $('#lightv').textContent = ev.target.value; if (big) { big.opts = bigOpts(); big.restart() } }
+$('#seed').onchange = () => { if (big) { big.opts = bigOpts(); big.restart() } }
+$('#flip').onclick = (ev) => { if (!big) return; big.flip = !big.flip; ev.currentTarget.classList.toggle('on', big.flip); big.restart() }
+$('#copy').onclick = async (ev) => { try { await navigator.clipboard.writeText($('#code').textContent); ev.currentTarget.textContent = 'Copiado!'; setTimeout(() => ev.currentTarget.textContent = 'Copiar código', 1400) } catch { } }
+$('#q').oninput = (ev) => { query = ev.target.value; refresh() }
+$('#bg').onchange = (ev) => { bgKind = ev.target.value; for (const t of tiles) t.stage?.setBg(bgKind); big?.setBg(bgKind) }
+cityImg.onload = () => { if (bgKind === 'city') { for (const t of tiles) t.stage?.setBg(bgKind); big?.setBg(bgKind) } }
+
+buildChips(); buildGrid(); refresh()
+tiles.forEach(t => io.observe(t.fig))
+
+let last = performance.now()
+function loop(now) {
+  const dt = Math.min(.1, (now - last) / 1000); last = now
+  for (const t of tiles) if (t.visible && t.stage && !t.fig.hidden) { try { t.stage.tick(dt) } catch (err) { console.warn('Erro em', t.e.id, err); t.stage = null; t.fig.querySelector('canvas')?.remove() } }
+  if (big) big.tick(dt)
+  requestAnimationFrame(loop)
+}
+requestAnimationFrame(loop)
+window.addEventListener('keydown', (ev) => { if (dlg.open && ev.key === ' ' && ev.target === document.body) { ev.preventDefault(); $('#play').click() } })
+</script>
+</body>
+</html>
