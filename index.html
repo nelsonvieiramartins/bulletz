@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0e081a">
 <title>BULLETZ — Divorced Dad Rock</title>
-<link rel="stylesheet" href="style.css?v=14">
-<script type="module" src="game.js?v=19"></script>
+<link rel="stylesheet" href="style.css?v=16">
+<script type="module" src="game.js?v=58"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -39,13 +39,17 @@
       <button data-key="ArrowRight" aria-label="Correr à direita">▶</button>
       <button data-key="ArrowDown" aria-label="Segure para agachar">▼</button>
       <button data-key="Space">SALTAR</button>
-      <button data-key="KeyX">DISPARAR</button>
+      <button data-key="KeyG">DISPARAR</button>
       <button id="touch-menu" type="button" aria-label="Abrir menu">☰</button>
     </div>
 
     <section id="title-screen" class="overlay title-screen" aria-label="Tela inicial">
       <img class="title-logo" src="assets/logo-bulletz.png" alt="BULLETZ — Divorced Dad Rock">
       <button id="start" type="button" class="start-button">INICIAR JOGO</button>
+      <nav class="title-links" aria-label="Ferramentas de teste">
+        <a href="efeitos.html">Teste FX</a>
+        <a href="sprites.html">Sprites</a>
+      </nav>
       <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
     </section>
 
@@ -70,7 +74,7 @@
             <span><kbd>←</kbd> <kbd>→</kbd> Correr</span>
             <span><kbd>Espaço</kbd> Saltar</span>
             <span><kbd>↓</kbd> <kbd>S</kbd> Agachar</span>
-            <span><kbd>X</kbd> Disparar</span>
+            <span><kbd>G</kbd> Disparar</span>
             <span><kbd>R</kbd> Reiniciar</span>
             <span><kbd>ESC</kbd> Menu</span>
           </div>
@@ -104,9 +108,9 @@
           <summary>Inimigos da fase</summary>
           <ul>
             <li><strong>Patrulheiro EX</strong><br>Corre pela cidade, salta entre plataformas e para para mirar. <a class="test-link" href="assets/patrulheiro-ex-movimento-v2.png" download>Movimento PNG</a> · <a class="test-link" href="assets/patrulheiro-ex-queda.png" download>Queda PNG</a></li>
-            <li><strong>Drone de Cobrança</strong><br>Flutua sobre a rua e acende o visor âmbar antes de disparar em diagonal. <a class="test-link" href="assets/drone-de-cobranca.png" download>Sprites PNG</a></li>
+            <li><strong>Drone de Cobrança</strong><br>Flutua sobre a rua e acende o visor antes de disparar em diagonal. <a class="test-link" href="assets/drone-padrao.png" download>Sprites PNG</a></li>
             <li><strong>Patrulheiro Elite</strong><br>Versão blindada em vermelho: aguenta mais tiros, corre mais e dispara mais rápido.</li>
-            <li><strong>Drone Pesado</strong><br>Drone avermelhado que solta dois disparos de uma vez, um deles bem inclinado.</li>
+            <li><strong>Drone Elite</strong><br>Drone vermelho reforçado com rajada horizontal mais longa, rápida e agressiva.</li>
             <li><strong>O Cobrador</strong><br>Blindado que alterna tiros altos e baixos. Com metade da vida, acelera e passa a soltar tiros duplos. <a class="test-link" href="assets/o-cobrador.png" download>Sprites PNG</a></li>
           </ul>
         </details>

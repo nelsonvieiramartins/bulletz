@@ -37,12 +37,15 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 .overlay{position:absolute;inset:0;z-index:5}
 .overlay[hidden]{display:none}
 
-.title-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,2.4cqw,32px);background:radial-gradient(ellipse at 50% 45%,#12081ccc,#05030af2 75%);text-align:center}
-.title-logo{width:min(62cqw,760px);height:auto;filter:drop-shadow(0 0 24px #ff8a4a44);animation:logo-in .9s cubic-bezier(.2,.8,.2,1) both}
+.title-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(8px,1.9cqw,26px);background:radial-gradient(ellipse at 50% 45%,#12081ccc,#05030af2 75%);text-align:center}
+.title-logo{width:min(54cqw,680px);height:auto;filter:drop-shadow(0 0 24px #ff8a4a44);animation:logo-in .9s cubic-bezier(.2,.8,.2,1) both}
 .start-button{font:900 clamp(14px,2.2cqw,28px)/1 var(--mono);letter-spacing:.14em;color:#1a0a10;background:linear-gradient(#ffe7a6,#ffb35a 55%,#ff7a45);border:2px solid #fff2c9;box-shadow:0 4px 0 #8f2a24,0 0 22px #ff9a5066;padding:.8em 1.6em;text-shadow:0 1px 0 #fff5}
 .start-button:hover{border-color:#fff;filter:brightness(1.08)}
 .start-button:active{transform:translateY(3px);box-shadow:0 1px 0 #8f2a24}
 .title-screen .start-button{animation:pulse 1.2s ease-in-out infinite}
+.title-links{display:flex;gap:clamp(8px,1.4cqw,18px);margin-top:calc(clamp(8px,1.9cqw,26px) * -.2)}
+.title-links a{font:700 clamp(10px,1.3cqw,15px) var(--mono);letter-spacing:.14em;text-transform:uppercase;text-decoration:none;color:#ffd9a0;background:#1b0f2acc;border:1px solid #ffb35a88;padding:.55em 1.1em;transition:background .15s,border-color .15s,color .15s}
+.title-links a:hover,.title-links a:focus-visible{background:#3a1f4a;border-color:#ffe7a6;color:#fff;outline:none}
 .title-hint{margin:0;font:700 clamp(9px,1.1cqw,13px) var(--mono);letter-spacing:.16em;color:#d9c3e4;opacity:.75}
 @keyframes pulse{50%{box-shadow:0 4px 0 #8f2a24,0 0 36px #ffb25aaa}}
 @keyframes logo-in{from{opacity:0;transform:scale(.92)}}

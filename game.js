@@ -1,3 +1,8 @@
+import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
+import { sfx } from './sfx.js'
+import { createGameFx } from './gamefx.js'
+import { applySpriteConfig } from './spriteconfig.js'
+
 const select = (selector) => document.querySelector(selector)
 const game = select('#game')
 const preview = select('#sprite')
@@ -15,9 +20,18 @@ sample.imageSmoothingEnabled = false
 const end = 6930
 const cell = 96
 const breathingFps = 3
+// Intervalo entre tiros do Edu em segundos (metralhadora). Maior = atira mais devagar.
+const fireInterval = .09
+// Variação de altura de cada bala, em unidades do jogo, para a rajada não sair em linha reta perfeita
+const fireSpread = 1.5
+// O som e o clarão seguem fireInterval; só 1 a cada bulletEvery disparos solta uma bala de verdade
+const bulletEvery = 2
+let shotTick = 0
 // Folhas do Edu (assets/edu-v2): células de 192x160, eixo do corpo em x=80 e pés em y=152,
 // desenhadas na metade do tamanho em unidades do mundo (1:1 nos pixels do canvas).
 const heroCell = { w: 192, h: 160, anchorX: 80, feetY: 152 }
+// Aumenta o Edu em 5 unidades visuais, mantendo os pés presos ao chão e a hitbox original.
+const heroVisualScale = (heroCell.h / pixelScale + 5) / (heroCell.h / pixelScale)
 const heroSheets = new Set(['idle','run','runFire','idleFire','playerFall','crouch','jump'])
 const jumpTuckLift = 10
 const crouchFireMuzzle = [26,-31]
@@ -70,6 +84,9 @@ const zones = [
 // Medalhas de vida extra escondidas em pontos difíceis
 const pickupSpots = [[2975,100], [3515,106], [5247,150]]
 const pickups = []
+// Power-up visual de teste: não altera atributos; apenas dispara o VFX ao ser coletado.
+const powerUpSpots = [[2560,170]]
+const powerUps = []
 const P = (x,min,max,y=224) => ({ x, type: 'patrol', min, max, y })
 const E = (x,min,max,y=224) => ({ x, type: 'elite', min, max, y })
 const D = (x,y=161) => ({ x, type: 'drone', y })
@@ -97,18 +114,28 @@ const enemySpawns = [
 const enemyTypes = {
   patrol: { hp: 3, points: 150, interval: 2.25, speed: 86, reach: 225, shotSpeed: 125 },
   elite: { hp: 5, points: 300, interval: 1.45, speed: 102, reach: 250, shotSpeed: 150 },
-  drone: { hp: 3, points: 250, interval: 2.1, speed: 32, reach: 280 },
-  heavyDrone: { hp: 4, points: 350, interval: 1.75, speed: 44, reach: 300 }
+  drone: { hp: 5, points: 250, interval: 2.1, speed: 32, reach: 280 },
+  heavyDrone: { hp: 8, points: 350, interval: 1.35, speed: 48, reach: 330, shotSpeed: 178, burstShots: 8, burstRate: .095 }
 }
-const eliteTint = 'rgba(150, 18, 52, .42)'
 const enemyFrames = {
   patrol: [80,72,40,70],
   patrolFall: [88,72,40,70],
-  drone: [40,40,20,20],
+  drone: [60,60,30,40],
+  elite: [80,72,40,70],
+  eliteFall: [88,72,40,70],
+  heavyDrone: [60,60,30,40],
+  droneDeath: [60,60,30,57],
+  eliteDroneDeath: [60,60,30,57],
   boss: [112,64,60,63]
 }
-const enemyMuzzles = { patrol: [27,-55], drone: [8,0] }
+const enemyMuzzles = { patrol: [27,-55], drone: [8,0], heavyDrone: [25,3] }
+// A folha preta tem uma silhueta visualmente mais pesada; comprime só a largura para casar com o patrulheiro padrão.
+const eliteWidthScale = .92
+// O drone padrão tem mais área transparente útil na destruição; reduz o voo para casar com a carcaça desmontada.
+const standardDroneScale = .76
 const bossMuzzles = [[-56,-41],[-57,-41],[-57,-33]]
+// Canos editados em sprites.html (assets/sprite-config.json) substituem os valores acima
+await applySpriteConfig({ runFire: runFireMuzzles, idleFire: idleFireMuzzle, crouch: crouchFireMuzzle, jump: jumpFireMuzzles, patrol: enemyMuzzles.patrol, boss: bossMuzzles })
 const enemies = []
 const enemyShots = []
 const maxLives = 3
@@ -130,13 +157,15 @@ function populateEnemies(at) {
   }
   pickups.length = 0
   for (const [x,y] of pickupSpots) if (x > at) pickups.push({ x, y, taken: false })
+  powerUps.length = 0
+  for (const [x,y] of powerUpSpots) if (x > at) powerUps.push({ x, y, taken: false })
   boss.hp = bossHp
   boss.delay = .75
   boss.volley = 0
 }
 populateEnemies(70)
 const keys = new Set()
-const keyboard = new Set(['ArrowLeft','ArrowRight','ArrowDown','KeyA','KeyD','KeyS','Space','ArrowUp','KeyW','KeyX'])
+const keyboard = new Set(['ArrowLeft','ArrowRight','ArrowDown','KeyA','KeyD','KeyS','Space','ArrowUp','KeyW','KeyG'])
 const neutralPad = { direction: 0, jump: false, fire: false, crouch: false, restart: false }
 const padButtons = { south: 0, west: 2, start: 9, down: 13, left: 14, right: 15 }
 const stickDeadzone = 0.20
@@ -150,6 +179,24 @@ let canReadPads = typeof navigator.getGamepads === 'function'
 const shots = []
 const impacts = []
 const sparks = []
+const powerUpMotes = []
+const powerUpDuration = 2.95
+let powerUpVisual = 0
+const droneExplosions = []
+const gameFx = createGameFx(width, height)   // pixelfx: cano, faísca de acerto, medalha
+const explosionColorCanvas = document.createElement('canvas')
+const explosionLightCanvas = document.createElement('canvas')
+explosionColorCanvas.width = explosionLightCanvas.width = width
+explosionColorCanvas.height = explosionLightCanvas.height = height
+const explosionColorCtx = explosionColorCanvas.getContext('2d')
+const explosionLightCtx = explosionLightCanvas.getContext('2d')
+const explosionColorImage = explosionColorCtx.createImageData(width,height)
+const explosionLightImage = explosionLightCtx.createImageData(width,height)
+const explosionFrame = {
+  w: width, h: height, ox: 0, oy: 0,
+  color: new Uint32Array(explosionColorImage.data.buffer),
+  light: new Uint32Array(explosionLightImage.data.buffer)
+}
 const impactDuration = .12
 const flashDuration = .075
 const flashSprite = document.createElement('canvas')
@@ -237,13 +284,24 @@ window.addEventListener('keydown', unlockMusic)
 window.addEventListener('pointerup', unlockMusic)
 let soundContext
 let shotSound
+let deathGruntSound
+let deathScreamSound
 let pendingShotAt = -Infinity
+// Velocidade do som do tiro (1 = original). Mais alto = mais curto e mais agudo.
+const shotSoundRate = 2.3
 const shotAudioData = fetch('assets/tiro-blaster.wav')
   .then((response) => {
     if (!response.ok) throw new Error('Falha ao carregar o som do tiro.')
     return response.arrayBuffer()
   })
   .catch((error) => { console.warn(error); return null })
+const deathAudioData = Promise.all([
+  fetch('FX%20SOUND/Death/edu-death-grunt.wav'),
+  fetch('FX%20SOUND/Death/edu-death-scream.wav')
+]).then(async (responses) => {
+  if (responses.some((response) => !response.ok)) throw new Error('Falha ao carregar os sons de morte do Edu.')
+  return Promise.all(responses.map((response) => response.arrayBuffer()))
+}).catch((error) => { console.warn(error); return [] })
 
 function flushShotSound() {
   if (!shotSound || soundContext?.state !== 'running') return
@@ -252,7 +310,7 @@ function flushShotSound() {
   if (age > 140) return
   const source = soundContext.createBufferSource()
   source.buffer = shotSound
-  source.playbackRate.value = 1.8
+  source.playbackRate.value = shotSoundRate * (0.94 + Math.random() * 0.12)
   source.connect(soundContext.destination)
   source.start()
 }
@@ -262,10 +320,15 @@ function enableSound() {
   if (!AudioEngine) return
   if (!soundContext) {
     soundContext = new AudioEngine()
+    sfx.init(soundContext)
     soundContext.addEventListener('statechange', flushShotSound)
     shotAudioData
       .then((data) => data ? soundContext.decodeAudioData(data) : null)
       .then((buffer) => { shotSound = buffer; flushShotSound() })
+      .catch((error) => console.warn(error))
+    deathAudioData
+      .then((sounds) => Promise.all(sounds.map((data) => soundContext.decodeAudioData(data))))
+      .then(([grunt, scream]) => { deathGruntSound = grunt; deathScreamSound = scream })
       .catch((error) => console.warn(error))
   }
   if (soundContext.state !== 'running') soundContext.resume().catch(() => {})
@@ -318,6 +381,10 @@ function reset(all = true) {
   shots.length = 0
   impacts.length = 0
   sparks.length = 0
+  powerUpMotes.length = 0
+  powerUpVisual = 0
+  droneExplosions.length = 0
+  gameFx.clear()
   jumpPressed = false
 }
 
@@ -405,7 +472,7 @@ window.addEventListener('keydown', (event) => {
     else if (mode === 'menu') resumeGame()
     return
   }
-  if (mode === 'title' && (event.code === 'Enter' || event.code === 'NumpadEnter' || event.code === 'Space') && !event.target.closest?.('button')) {
+  if (mode === 'title' && (event.code === 'Enter' || event.code === 'NumpadEnter' || event.code === 'Space') && !event.target.closest?.('button, a')) {
     event.preventDefault()
     startGame()
   }
@@ -690,43 +757,108 @@ function update(dt) {
     if (player.x >= checkpoint && respawnX < checkpoint && player.grounded && !player.mover) {
       respawnX = checkpoint
       announce('PONTO DE CONTROLE',1.6)
+      sfx.play('checkpoint')
     }
   }
   if (zoneIndex < zones.length && player.x >= zones[zoneIndex][0]) {
     announce(zones[zoneIndex][1],2.2)
+    sfx.play('zone')
     zoneIndex++
   }
   for (const pickup of pickups) {
     if (pickup.taken || Math.abs(player.x-pickup.x) > 14 || pickup.y < player.y-62 || pickup.y > player.y+4) continue
     pickup.taken = true
+    gameFx.collect({ x: pickup.x, y: pickup.y - 10 })
     if (lives < maxLives) {
       lives++
       announce('VIDA EXTRA',1.4)
+      sfx.play('extraLife')
     } else {
       score += 500
       announce('MEDALHA +500',1.4)
+      sfx.play('medal')
     }
+  }
+  for (const powerUp of powerUps) {
+    if (powerUp.taken || Math.abs(player.x-powerUp.x) > 16 || powerUp.y < player.y-64 || powerUp.y > player.y+5) continue
+    powerUp.taken = true
+    powerUpVisual = powerUpDuration
+    powerUpMotes.length = 0
+    for (let i=0; i<30; i++) {
+      const angle = i/30*Math.PI*2 + (i%3)*.12
+      const radius = 30 + (i%7)*4
+      powerUpMotes.push({
+        x: player.x + Math.cos(angle)*radius,
+        y: player.y-34 + Math.sin(angle)*radius*.72,
+        vx: -Math.cos(angle)*(58+(i%5)*8),
+        vy: -Math.sin(angle)*(46+(i%4)*7),
+        age: 0,
+        life: .26 + (i%4)*.025,
+        inward: true
+      })
+    }
+    announce('POWER UP!',1.4)
+    sfx.play('powerUp')
   }
   if (player.x >= goal && boss.hp === 0 && !finish && player.grounded) {
     finish = true
     announce('CIDADE LIBERTADA',6)
+    sfx.play('victory')
   }
   if (player.grounded && Math.abs(player.vx) > 8) {
     player.phase = (player.phase + Math.abs(player.vx) * dt / 12) % 8
     if (Math.random() < dt * 15) sparks.push({x:player.x-player.face*7,y:player.y-2,t:.19})
   } else if (player.grounded) player.phase = 0
   player.cooldown -= dt
-  player.trigger = active('KeyX') || pad.fire
+  player.trigger = active('KeyG') || pad.fire
+  if (!player.trigger) shotTick = 0
   if (player.trigger && player.cooldown <= 0) {
-    player.cooldown = .19
-    const [muzzleX,muzzleY] = playerPose().muzzle
-    shots.push({x:player.x + player.face * muzzleX,y:player.y + muzzleY,dx:player.face,t:.75})
+    player.cooldown = fireInterval
+    if (shotTick++ % bulletEvery === 0) {
+      const [muzzleX,muzzleY] = playerPose().muzzle
+      // a bala nasce na ponta que se vê da arma (o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano)
+      shots.push({x:player.x + player.face * muzzleX * heroVisualScale,y:player.y + muzzleY * heroVisualScale + (Math.random()*2-1)*fireSpread,dx:player.face,t:.75})
+    }
     playShotSound()
   }
   const idle = player.grounded && player.vx === 0 && direction === 0 &&
     player.crouch === 0 && !player.trigger && player.cooldown <= 0
   idleTime = idle ? idleTime + dt : 0
   if (!finish) updateCombat(dt)
+  const firing = player.trigger && lives > 0 && !finish && !playerFall ? playerPose().muzzle : null
+  // o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano: o clarão acompanha a ponta que se vê
+  gameFx.muzzle(firing ? { x: player.x + player.face*firing[0]*heroVisualScale, floor: player.y, height: -firing[1]*heroVisualScale, flip: player.face < 0 } : null)
+  gameFx.update(dt)
+  for (let i=droneExplosions.length-1; i>=0; i--) {
+    const explosion = droneExplosions[i]
+    explosion.fx.update(dt)
+    if (explosion.fx.done()) droneExplosions.splice(i,1)
+  }
+  if (powerUpVisual > 0) {
+    const age = powerUpDuration-powerUpVisual
+    powerUpVisual = Math.max(0,powerUpVisual-dt)
+    const intensity = Math.min(1,age/.16) * Math.min(1,powerUpVisual/.58)
+    if (age > .24 && Math.random() < dt*(20+18*intensity)) {
+      const side = Math.random() < .5 ? -1 : 1
+      powerUpMotes.push({
+        x: player.x + side*(8+Math.random()*12),
+        y: player.y-4-Math.random()*48,
+        vx: -player.vx*.12 + (Math.random()-.5)*12,
+        vy: -55-Math.random()*75,
+        age: 0,
+        life: .34+Math.random()*.34,
+        inward: false
+      })
+    }
+  }
+  for (let i=powerUpMotes.length-1; i>=0; i--) {
+    const mote = powerUpMotes[i]
+    mote.age += dt
+    if (mote.age >= mote.life) { powerUpMotes.splice(i,1); continue }
+    mote.x += mote.vx*dt
+    mote.y += mote.vy*dt
+    if (!mote.inward) mote.vy -= 12*dt
+  }
   for (const spark of sparks) { spark.y -= dt * 18; spark.t -= dt }
   while (sparks.length && sparks[0].t <= 0) sparks.shift()
   camera += (clamp(player.x - 154,0,end+50-width) - camera) * Math.min(1,dt * 6)
@@ -735,6 +867,36 @@ function update(dt) {
     progress = nextProgress
     progressText.textContent = progress + '% DA FASE'
   }
+}
+
+// Grunhido para perda de vida; grito mais intenso para game over.
+const deathSoundVolume = .65
+function playDeathSound(gameOver = false) {
+  if (!soundContext || soundContext.state !== 'running') return
+  const buffer = gameOver ? deathScreamSound : deathGruntSound
+  if (!buffer) return
+  const source = soundContext.createBufferSource()
+  const gain = soundContext.createGain()
+  source.buffer = buffer
+  gain.gain.value = deathSoundVolume
+  source.connect(gain).connect(soundContext.destination)
+  source.start()
+}
+
+// Soldado derrotado: o mesmo grunhido do Edu, só que mais agudo (e com um tom levemente diferente a cada vez).
+// Mais baixo quanto mais longe do Edu e mudo a partir de ~320 unidades.
+const soldierDeathPitch = 1.2
+function playSoldierDeathSound(dx = 0) {
+  if (!soundContext || soundContext.state !== 'running' || !deathGruntSound) return
+  const near = Math.max(0, 1 - Math.abs(dx) / 320)
+  if (!near) return
+  const source = soundContext.createBufferSource()
+  const gain = soundContext.createGain()
+  source.buffer = deathGruntSound
+  source.playbackRate.value = soldierDeathPitch * (.97 + Math.random() * .06)
+  gain.gain.value = deathSoundVolume * .8 * near
+  source.connect(gain).connect(soundContext.destination)
+  source.start()
 }
 
 function hitPlayer() {
@@ -751,6 +913,7 @@ function loseLife() {
   jumpPressed = false
   const belowMap = player.y > 295
   playerFall = { age: 0, belowMap }
+  playDeathSound(lives === 0)
   if (belowMap) completePlayerFall()
 }
 
@@ -831,6 +994,7 @@ function updatePatrol(enemy, distance, config, dt) {
   if (aiming && enemy.delay <= 0) {
     const [x,y] = enemyMuzzles.patrol
     enemyShots.push({x:enemy.x+enemy.face*x,y:enemy.y+y,vx:enemy.face*config.shotSpeed})
+    sfx.play('patrolShot', { dx: enemy.x - player.x })
     enemy.delay = config.interval
   }
   const oldY = enemy.y
@@ -863,6 +1027,32 @@ function updatePatrolFall(enemy, dt) {
   landOnPlatform(enemy, oldY, 4)
 }
 
+function updateDroneFall(enemy, dt) {
+  enemy.deathAge += dt
+  if (enemy.grounded || enemy.y > height+70) return
+  const oldY = enemy.y
+  enemy.vy += 520*dt
+  enemy.y += enemy.vy*dt
+  landOnPlatform(enemy,oldY,9)
+  if (enemy.grounded) {
+    enemy.crashAt = elapsed
+    if (!enemy.crashExplosion) {
+      enemy.crashExplosion = true
+      sfx.play(enemy.type === 'heavyDrone' ? 'heavyBlast' : 'droneBlast', { dx: enemy.x - player.x })
+      const size = enemy.type === 'heavyDrone' ? 1.08 : .92
+      droneExplosions.push({
+        fx: createSpriteFusionExplosion({
+          x: enemy.x*2,
+          y: (enemy.y-3)*2,
+          ground: enemy.y*2,
+          size,
+          seed: Math.max(1,Math.round(enemy.origin*137))
+        })
+      })
+    }
+  }
+}
+
 function firstShotHit(shot, travel, bossActive) {
   let hit
   let nearest = travel
@@ -892,6 +1082,7 @@ function updateCombat(dt) {
     boss.delay = boss.hp <= bossHp/2 ? .82 : 1.25
     const [x,y] = bossMuzzles[low ? 2 : 1]
     enemyShots.push({x:boss.x+x,y:boss.y+y,vx:-145})
+    sfx.play('bossShot', { dx: boss.x - player.x })
     if (boss.hp <= bossHp/2 && boss.volley % 3 === 0) {
       const [ox,oy] = bossMuzzles[low ? 1 : 2]
       enemyShots.push({x:boss.x+ox,y:boss.y+oy,vx:-118})
@@ -900,8 +1091,11 @@ function updateCombat(dt) {
   if (boss.hp > 0 && player.x > boss.x-40) player.x = boss.x-40
   const playerTop = player.y - (player.crouch > .6 ? 40 : 58)
   for (const enemy of enemies) {
+    enemy.hitKick = (enemy.hitKick || 0) * Math.max(0,1-dt*15)
+    enemy.hitKickY = (enemy.hitKickY || 0) * Math.max(0,1-dt*18)
     if (enemy.hp <= 0) {
       if (enemy.kind === 'patrol' && enemy.fallAge < 1.2) updatePatrolFall(enemy, dt)
+      else if (enemy.kind === 'drone') updateDroneFall(enemy,dt)
       continue
     }
     const distance = player.x - enemy.x
@@ -911,21 +1105,47 @@ function updateCombat(dt) {
       if (Math.abs(player.x-enemy.x) < 15 && player.y > enemy.y-56 && playerTop < enemy.y && hitPlayer()) return
       continue
     }
-    enemy.y = enemy.spawnY + Math.round(Math.sin(elapsed*3 + enemy.origin)*4)
+    const eliteDrone = enemy.type === 'heavyDrone'
+    // O drone comum mantém o voo original. O Elite patrulha uma faixa vertical ampla;
+    // a segunda onda quebra a repetição mecânica sem criar trancos ou mudanças bruscas.
+    const hoverPhase = enemy.origin*.015
+    enemy.y = enemy.spawnY + (eliteDrone
+      ? Math.sin(elapsed*1.12 + hoverPhase)*22 + Math.sin(elapsed*.47 + hoverPhase*.7)*5
+      : Math.round(Math.sin(elapsed*3 + enemy.origin)*4))
     enemy.moving = false
-    if (Math.abs(distance) > config.reach) continue
+    if (Math.abs(distance) > config.reach) {
+      if (eliteDrone) enemy.burst = 0
+      continue
+    }
     enemy.face = Math.sign(distance) || enemy.face
+    if (eliteDrone && enemy.burst > 0) {
+      enemy.burstDelay -= dt
+      while (enemy.burst > 0 && enemy.burstDelay <= 0) {
+        const [x,y] = enemyMuzzles[enemy.type] || enemyMuzzles.drone
+        enemyShots.push({x:enemy.x + enemy.face*x,y:enemy.y+y,vx:enemy.face*config.shotSpeed,vy:0})
+        sfx.play('droneShot', { dx: enemy.x - player.x })
+        enemy.burst--
+        enemy.burstDelay += config.burstRate
+      }
+      if (enemy.burst === 0) enemy.delay = config.interval
+      continue
+    }
     enemy.delay -= dt
-    if (Math.abs(distance) > 88 && enemy.delay > .34) {
+    const warningTime = eliteDrone ? .28 : .34
+    if (Math.abs(distance) > 88 && enemy.delay > warningTime) {
       const next = clamp(enemy.x + enemy.face*config.speed*dt, enemy.origin-48, enemy.origin+48)
       enemy.moving = next !== enemy.x
       enemy.x = next
     }
     if (enemy.delay <= 0) {
-      enemy.delay = config.interval
-      const [x,y] = enemyMuzzles[enemy.kind]
-      enemyShots.push({x:enemy.x + enemy.face*x,y:enemy.y+y,vx:enemy.face*155,vy:36})
-      if (enemy.type === 'heavyDrone') enemyShots.push({x:enemy.x + enemy.face*x,y:enemy.y+y,vx:enemy.face*120,vy:74})
+      if (eliteDrone) {
+        enemy.burst = config.burstShots
+        enemy.burstDelay = 0
+      } else {
+        enemy.delay = config.interval
+        const [x,y] = enemyMuzzles.drone
+        enemyShots.push({x:enemy.x + enemy.face*x,y:enemy.y+y,vx:enemy.face*155,vy:36})
+      }
     }
   }
 
@@ -936,15 +1156,33 @@ function updateCombat(dt) {
     if (hit) {
       const { target, x } = hit
       impacts.push({x,y:shot.y,dx:shot.dx,at:elapsed})
-      if (target.kind === 'patrol') target.flashUntil = elapsed + flashDuration
+      sfx.play('hitEnemy', { dx: x - player.x })
+      gameFx.hit({ x, y: shot.y, floor: target.y, dx: shot.dx })
+      target.flashUntil = elapsed + (target.kind === 'drone' ? .12 : flashDuration)
+      if (target !== boss) {
+        target.hitKick = shot.dx*6
+        target.hitKickY = -2.5
+      }
       if (--target.hp === 0) {
         if (target === boss) {
           score += 1500
           enemyShots.length = 0
           announce('O COBRADOR CAIU · AVANCE',2.5)
+          sfx.play('bossDown')
         } else {
           score += enemyTypes[target.type].points
-          if (target.kind === 'patrol') target.fallAge = 0
+          if (target.kind === 'patrol') {
+            target.fallAge = 0
+            playSoldierDeathSound(target.x - player.x)
+          }
+          else {
+            target.deathAge = 0
+            target.crashAt = null
+            target.crashExplosion = false
+            target.grounded = false
+            target.vy = 18
+            target.y += 17
+          }
         }
       }
       shots.splice(i,1)
@@ -1022,30 +1260,91 @@ function enemyFrame(sheet, frame, x, y, face, hitFlash = false, tint = null) {
   const [w,h,anchorX,anchorY] = enemyFrames[sheet]
   ctx.save()
   ctx.translate(Math.round(x),Math.round(y))
-  ctx.scale(-face,1)
-  const columns = sheet === 'patrol' || sheet === 'patrolFall' ? 4 : 3
+  const widthScale = sheet === 'elite' || sheet === 'eliteFall' ? eliteWidthScale : 1
+  const spriteScale = sheet === 'drone' ? standardDroneScale : 1
+  const droneFacing = sheet === 'heavyDrone' || sheet === 'eliteDroneDeath'
+  ctx.scale((droneFacing ? face : -face) * widthScale * spriteScale,spriteScale)
+  const columns = sheet === 'droneDeath' || sheet === 'eliteDroneDeath' ? 6 : sheet === 'patrol' || sheet === 'patrolFall' || sheet === 'elite' || sheet === 'eliteFall' ? 4 : 3
   const sx = (frame%columns)*w
   const sy = Math.floor(frame/columns)*h
+  // O último quadro dos drones tinha fumaça estática no topo; recorta só a sucata.
+  const cropTop = (sheet === 'droneDeath' || sheet === 'eliteDroneDeath') && frame === 5 ? 40 : 0
+  const sourceHeight = h-cropTop
   if (hitFlash || tint) {
     flashCtx.clearRect(0,0,w,h)
-    flashCtx.drawImage(sprites[sheet],sx,sy,w,h,0,0,w,h)
+    flashCtx.drawImage(sprites[sheet],sx,sy+cropTop,w,sourceHeight,0,cropTop,w,sourceHeight)
     flashCtx.globalCompositeOperation = 'source-atop'
     flashCtx.fillStyle = hitFlash ? 'rgba(255, 34, 46, .76)' : tint
     flashCtx.fillRect(0,0,w,h)
     flashCtx.globalCompositeOperation = 'source-over'
-    ctx.drawImage(flashSprite,0,0,w,h,-anchorX,-anchorY,w,h)
-  } else ctx.drawImage(sprites[sheet],sx,sy,w,h,-anchorX,-anchorY,w,h)
+    ctx.drawImage(flashSprite,0,cropTop,w,sourceHeight,-anchorX,-anchorY+cropTop,w,sourceHeight)
+  } else ctx.drawImage(sprites[sheet],sx,sy+cropTop,w,sourceHeight,-anchorX,-anchorY+cropTop,w,sourceHeight)
+  ctx.restore()
+}
+
+function drawDroneDeathFlash(x,y,age) {
+  if (age < 0 || age >= .16) return
+  const t = age/.16
+  const reach = Math.round(7 + t*19)
+  ctx.save()
+  ctx.globalAlpha = 1-t
+  fill(ctx,'#fff7cf',x-reach,y-2,reach*2,4)
+  fill(ctx,'#fff7cf',x-2,y-reach,4,reach*2)
+  fill(ctx,'#ffb338',x-7-t*5,y-7-t*5,14+t*10,14+t*10)
+  fill(ctx,'#fffbe8',x-4,y-4,8,8)
+  ctx.restore()
+}
+
+// Renderiza diretamente o Explosion VFX oficial do Sprite Fusion (MIT).
+function drawDroneCrashExplosions(layer,scroll) {
+  if (!droneExplosions.length) return
+  explosionFrame.ox = scroll
+  explosionFrame.color.fill(0)
+  explosionFrame.light.fill(0)
+  for (const explosion of droneExplosions) explosion.fx.draw(explosionFrame,layer)
+  explosionColorCtx.putImageData(explosionColorImage,0,0)
+  explosionLightCtx.putImageData(explosionLightImage,0,0)
+  ctx.drawImage(explosionColorCanvas,0,0)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.drawImage(explosionLightCanvas,0,0)
+  ctx.restore()
+}
+
+function drawDroneWreckSmoke(enemy,x,y) {
+  if (!Number.isFinite(enemy.crashAt)) return
+  const seed = enemy.origin*.013
+  ctx.save()
+  for (let i = 0; i < 5; i++) {
+    const age = (elapsed-enemy.crashAt+i*.29)%1.45
+    const t = age/1.45
+    const alpha = Math.sin(Math.PI*t)*.58
+    const px = x + Math.sin(seed+i*2.2+t*4)*3 + t*4
+    const py = y-17-t*17-i%2
+    const size = 2+Math.round(t*4)
+    ctx.globalAlpha = alpha
+    fill(ctx,i%2 ? '#5b5261' : '#393742',px-size/2,py-size/2,size,size)
+    if (size >= 4) fill(ctx,'#77707a',px-size/2+1,py-size/2+1,Math.max(1,size-3),Math.max(1,size-3))
+  }
   ctx.restore()
 }
 
 function drawEnemies(scroll) {
   for (const enemy of enemies) {
-    const x = enemy.x-scroll
+    const x = enemy.x-scroll+(enemy.hitKick || 0)
+    const y = enemy.y+(enemy.hitKickY || 0)
     if (x < -90 || x > width+90) continue
     if (enemy.hp <= 0) {
       if (enemy.kind === 'patrol' && enemy.fallAge < 1.2) {
         const frame = Math.min(enemy.grounded ? 3 : 2, Math.floor(enemy.fallAge/.095))
-        enemyFrame('patrolFall', frame, x, enemy.y, enemy.face, elapsed < enemy.flashUntil, enemy.elite ? eliteTint : null)
+        enemyFrame(enemy.type === 'elite' ? 'eliteFall' : 'patrolFall', frame, x, enemy.y, enemy.face, elapsed < enemy.flashUntil)
+      } else if (enemy.kind === 'drone' && enemy.y < height+70) {
+        const frame = enemy.grounded
+          ? elapsed-enemy.crashAt < .14 ? 4 : 5
+          : Math.min(3,Math.floor(enemy.deathAge/.14))
+        drawDroneDeathFlash(x,y,enemy.deathAge)
+        if (frame === 5) drawDroneWreckSmoke(enemy,x,y)
+        enemyFrame(enemy.type === 'heavyDrone' ? 'eliteDroneDeath' : 'droneDeath',frame,x,y,enemy.face)
       }
       continue
     }
@@ -1055,8 +1354,10 @@ function drawEnemies(scroll) {
       else if (enemy.aiming) frame = 8
       else if (enemy.landing > 0) frame = 7
       else frame = Math.abs(enemy.vx) < 5 ? 8 : Math.floor(enemy.stride/12)
-    } else frame = enemy.delay <= .34 ? 2 : Math.floor(elapsed*9)%2
-    enemyFrame(enemy.kind, frame, x, enemy.y, enemy.face, elapsed < enemy.flashUntil, enemy.elite ? eliteTint : null)
+    } else if (enemy.type === 'heavyDrone') frame = enemy.burst > 0 || enemy.delay <= .28 ? 2 : Math.floor(elapsed*6)%2
+    else frame = enemy.delay <= .34 ? 2 : Math.floor(elapsed*9)%2
+    const sheet = enemy.type === 'elite' ? 'elite' : enemy.type === 'heavyDrone' ? 'heavyDrone' : enemy.kind
+    enemyFrame(sheet, frame, x, y, enemy.face, elapsed < enemy.flashUntil)
   }
   const x = boss.x-scroll
   if (boss.hp <= 0 || x < -90 || x > width+90) return
@@ -1111,12 +1412,160 @@ function render() {
     readFrame = previewFrame
   }
 }
+// Fumaça das chaminés do fundo (coordenadas da imagem assets/cidade.webp, 640x270).
+// As baforadas somam densidade num buffer de baixa resolução, que é quantizado em faixas de cor
+// com pontilhado (Bayer) nas bordas: vira uma pluma contínua e irregular, em pixel art.
+// Sem estado: tudo sai do tempo de jogo, então pausa e reinício funcionam sozinhos.
+const chimneys = [
+  { x: 212, y: 128, size: .8, life: 6, puffs: 14, seed: 1.3 },
+  { x: 224.5, y: 128, size: .8, life: 6.6, puffs: 14, seed: 4.1 },
+  { x: 386, y: 83, size: 1.15, life: 7.5, puffs: 18, seed: 2.7 }
+]
+const smokeWind = 5      // quanto o vento leva a fumaça para a direita ao longo da vida da baforada
+const smokeRise = 9      // subida em px por segundo
+const smokeCurve = 1.8   // >1: sobe reta perto da chaminé e só depois deita com o vento
+const smokeWobble = 7    // balanço lateral das baforadas
+const smokeBands = [     // [densidade mínima, cor, opacidade]: da borda para o miolo
+  [.3, [78, 62, 112], .5],
+  [.72, [134, 112, 162], .6],
+  [1.2, [184, 164, 204], .64]
+]
+const bayer4 = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5].map(v => (v + .5) / 16)
+const smokeCanvas = document.createElement('canvas')
+const smokeCtx = smokeCanvas.getContext('2d')
+function smokeNoise(x, y) {
+  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
+  return n - Math.floor(n)
+}
+function smoothNoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi
+  const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf)
+  const a = smokeNoise(xi,yi), b = smokeNoise(xi+1,yi), c = smokeNoise(xi,yi+1), d = smokeNoise(xi+1,yi+1)
+  return a + (b-a)*u + (c-a)*v + (a-b-c+d)*u*v
+}
+function drawSmoke(shift) {
+  for (const c of chimneys) {
+    const reach = c.life * smokeRise * c.size
+    const left = Math.floor(c.x - shift - 24*c.size), top = Math.floor(c.y - reach - 22*c.size)
+    const w = Math.ceil(c.life * smokeWind * c.size + 50*c.size), h = Math.ceil(reach + 28*c.size)
+    if (left > width || left + w < 0) continue
+    const density = new Float32Array(w * h)
+    for (let k = 0; k < c.puffs; k++) {
+      const age = (elapsed + k * c.life / c.puffs + c.seed) % c.life
+      const t = age / c.life
+      const wobble = Math.sin(age*1.3 + k*2.1 + c.seed) * (1 + t*smokeWobble) + Math.sin(age*.6 + k*3.7) * t*smokeWobble*.6
+      const px = c.x - shift + smokeWind*c.life*Math.pow(t, smokeCurve)*c.size + wobble - left
+      const py = c.y - 1 - smokeRise*age*c.size - top
+      const r = (4 + t*15) * c.size
+      const strength = Math.min(1, t/.06) * Math.pow(1-t, .9) * 1.5
+      const x0 = Math.max(0, Math.floor(px-r)), x1 = Math.min(w-1, Math.ceil(px+r))
+      const y0 = Math.max(0, Math.floor(py-r)), y1 = Math.min(h-1, Math.ceil(py+r))
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const d2 = ((x-px)*(x-px) + (y-py)*(y-py)) / (r*r)
+        if (d2 < 1) density[y*w+x] += strength * (1-d2) * (1-d2)
+      }
+    }
+    const img = smokeCtx.createImageData(w, h)
+    const data = img.data
+    const drift = elapsed * smokeRise * c.size * .35
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = density[y*w+x]
+      if (v <= .05) continue
+      // borda irregular: ruído que sobe junto com a fumaça e rasga mais a pluma quanto mais alto
+      const X = x + left + shift, Y = y + top + drift
+      const nz = smoothNoise(X/6, Y/6)*.65 + smoothNoise(X/2.7 + 7, Y/2.7)*.35
+      const hf = Math.min(1, Math.max(0, (c.y - y - top) / reach))
+      v *= (1 - hf*.8 + hf*1.6*nz) * (.55 + .9*nz)
+      const dither = bayer4[(y & 3) * 4 + (x & 3)] * .22 - .11
+      let band = -1
+      for (let i = smokeBands.length - 1; i >= 0; i--) if (v + dither >= smokeBands[i][0]) { band = i; break }
+      if (band < 0) continue
+      const [, rgb, alpha] = smokeBands[band]
+      const o = (y*w+x) * 4
+      data[o] = rgb[0]; data[o+1] = rgb[1]; data[o+2] = rgb[2]; data[o+3] = alpha * 255
+    }
+    if (smokeCanvas.width < w) smokeCanvas.width = w
+    if (smokeCanvas.height < h) smokeCanvas.height = h
+    smokeCtx.clearRect(0, 0, smokeCanvas.width, smokeCanvas.height)
+    smokeCtx.putImageData(img, 0, 0)
+    ctx.drawImage(smokeCanvas, 0, 0, w, h, left, top, w, h)
+  }
+}
+function drawPowerUpPickup(powerUp,scroll) {
+  const x = Math.round(powerUp.x-scroll)
+  if (powerUp.taken || x < -24 || x > width+24) return
+  const bob = Math.round(Math.sin(elapsed*4.5 + powerUp.x)*3)
+  const y = Math.round(powerUp.y-27+bob)
+  const pulse = .55+.45*Math.sin(elapsed*7+powerUp.x)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.globalAlpha = .22+.12*pulse
+  fill(ctx,'#239eea',x-11,y-11,22,22)
+  ctx.restore()
+  fill(ctx,'#172a68',x-6,y-8,12,17)
+  fill(ctx,'#2290e6',x-5,y-7,10,15)
+  fill(ctx,'#3fd0ff',x-3,y-5,6,11)
+  fill(ctx,'#e0fcff',x-1,y-3,2,7)
+  fill(ctx,'#ffffff',x-4,y,8,2)
+  fill(ctx,'#8ff0ff',x-1,y-9,2,2)
+  for (let i=0;i<4;i++) {
+    const a = elapsed*1.8+i*Math.PI/2
+    const sx = x+Math.round(Math.cos(a)*10)
+    const sy = y+Math.round(Math.sin(a)*7)
+    fill(ctx,i%2 ? '#8ff0ff' : '#ffffff',sx,sy,1+(i%2),1+(i%2))
+  }
+}
+function drawPowerUpEffect(scroll,front=false) {
+  if (powerUpVisual <= 0 && powerUpMotes.length === 0) return
+  const age = powerUpDuration-powerUpVisual
+  const x = Math.round(player.x-scroll)
+  const y = Math.round(player.y)
+  const fadeIn = clamp(age/.16,0,1)
+  const fadeOut = clamp(powerUpVisual/.58,0,1)
+  const aura = fadeIn*fadeOut*(.8+.2*Math.sin(elapsed*13))
+  ctx.save()
+  if (!front && aura > .02) {
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = .12*aura
+    fill(ctx,'#2290e6',x-22,y-67,44,65)
+    ctx.globalAlpha = .32*aura
+    const flare = age < .48 ? 1-age/.48 : 0
+    const reach = 13+Math.round(flare*46)
+    fill(ctx,'#3fd0ff',x-reach,y-2,reach*2,1)
+    fill(ctx,'#8ff0ff',x-Math.round(reach*.72),y-3,Math.round(reach*1.44),1)
+    ctx.globalAlpha = .7*aura
+    for (let row=0; row<10; row++) {
+      const wave = Math.sin(elapsed*18+row*1.7)
+      const half = 11+Math.round(wave*2)+(row<4 ? 2 : 0)
+      const py = y-6-row*6
+      fill(ctx,row%3===0 ? '#8ff0ff' : '#3fd0ff',x-half,py,2,3)
+      fill(ctx,row%3===1 ? '#e0fcff' : '#2290e6',x+half-2,py-1,2,4)
+    }
+  }
+  for (let i=0;i<powerUpMotes.length;i++) {
+    const mote = powerUpMotes[i]
+    if ((i%2===0) !== front) continue
+    const k = 1-mote.age/mote.life
+    const mx = Math.round(mote.x-scroll), my = Math.round(mote.y)
+    ctx.globalAlpha = clamp(k*1.4,0,1)
+    const color = i%3===0 ? '#ffffff' : i%3===1 ? '#8ff0ff' : '#3fd0ff'
+    if (mote.inward) {
+      fill(ctx,color,mx-1,my-1,3,3)
+      fill(ctx,'#2290e6',mx-4,my,3,1)
+    } else {
+      fill(ctx,color,mx,my,2,Math.max(2,Math.round(7*k)))
+      if (i%4===0) { fill(ctx,'#e0fcff',mx-2,my+1,6,1); fill(ctx,'#e0fcff',mx,my-1,2,5) }
+    }
+  }
+  ctx.restore()
+}
 function renderWorld() {
   const scroll = Math.round(camera)
   const bgWidth = Math.round(height * sprites.bg.width / sprites.bg.height)
   const scaledWidth = Math.max(640,bgWidth)
   const shift = Math.round(42 + camera/(end+50-width)*(scaledWidth-width-42))
   ctx.drawImage(sprites.bg,-shift,0,scaledWidth,height)
+  drawSmoke(shift)
   for (const [x,y,w] of platforms) terrain(x,y,w,scroll)
   for (const m of movers) drawMover(m,scroll)
   for (const checkpoint of checkpoints) marker(checkpoint,224,scroll,false,respawnX>=checkpoint)
@@ -1127,7 +1576,10 @@ function renderWorld() {
     const bob = Math.round(Math.sin(elapsed*4 + pickup.x)*2)
     ctx.drawImage(sprites.medal, Math.round(px-7), pickup.y-19+bob, 13, 19)
   }
+  for (const powerUp of powerUps) drawPowerUpPickup(powerUp,scroll)
+  drawDroneCrashExplosions('back',scroll)
   drawEnemies(scroll)
+  drawDroneCrashExplosions('front',scroll)
   for (const shot of enemyShots) {
     fill(ctx,'#fa5483',shot.x-scroll-4,shot.y-1,9,3)
     fill(ctx,'#ffd5ae',shot.x-scroll-1,shot.y,4,1)
@@ -1149,18 +1601,16 @@ function renderWorld() {
     fill(ctx,'#f7a053',x-impact.dx*spread,impact.y+spread,1,1)
     ctx.restore()
   }
+  drawPowerUpEffect(scroll,false)
   const pose = playerPose()
   ctx.save()
   ctx.translate(Math.round(player.x-camera),Math.round(player.y))
-  ctx.scale(player.face,1)
+  ctx.scale(player.face * heroVisualScale,heroVisualScale)
   const showPlayer = playerFall ? !playerFall.belowMap : lives > 0 && (invulnerability < .01 || Math.floor(invulnerability*14)%2 === 0)
   if (showPlayer) heroAtlas(ctx,pose.sheet,pose.frame,0,-(pose.lift || 0),1/pixelScale)
-  if (lives > 0 && !finish && pose.muzzle && player.cooldown > .15) {
-    const [x,y] = pose.muzzle
-    fill(ctx,'#f29440',x-2,y,10,4)
-    fill(ctx,'#fff2a7',x+1,y+1,7,2)
-  }
   ctx.restore()
+  gameFx.draw(ctx,scroll)   // clarão do cano, faíscas e brilho de medalha (pixelfx)
+  drawPowerUpEffect(scroll,true)
 }
 // Gestos sutis do retrato enquanto o Edu está ileso: [rosto, duração em ms]
 const idleGestures = [
@@ -1229,18 +1679,39 @@ Promise.all([
   loadImage('bg','assets/cidade.webp'),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
   loadImage('patrolFall','assets/patrulheiro-ex-queda.png'),
-  loadImage('drone','assets/drone-de-cobranca.png'),
+  loadImage('elite','assets/soldado-elite-movimento.png'),
+  loadImage('eliteFall','assets/soldado-elite-queda.png'),
+  loadImage('drone','assets/drone-padrao.png'),
+  loadImage('heavyDrone','assets/drone-elite.png'),
+  loadImage('droneDeath','assets/drone-padrao-destruicao.png'),
+  loadImage('eliteDroneDeath','assets/drone-elite-destruicao.png'),
   loadImage('boss','assets/o-cobrador.png'),
   loadImage('medal','assets/medalha-bulletz.png')
 ]).then(() => {
   updateMovers()
   // Abra com ?debug para testar: bulletz.warp(x) teleporta o Edu, bulletz.god = true ignora dano
   if (new URLSearchParams(location.search).has('debug')) {
+    const debugParams = new URLSearchParams(location.search)
     window.bulletz = {
-      player, enemies, boss, movers, pickups, platforms,
+      player, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms,
       get lives() { return lives }, set lives(v) { lives = v },
       get god() { return invulnerability > 1e5 }, set god(v) { invulnerability = v ? 1e9 : 0 },
       warp(x) { respawnX = x; reset(false); respawnX = Math.max(...[70, ...checkpoints].filter(c => c <= x)) }
+    }
+    const debugWarp = Number(debugParams.get('warp'))
+    if (Number.isFinite(debugWarp) && debugWarp > 0) window.bulletz.warp(debugWarp)
+    if (debugParams.has('testCrash')) {
+      const testDrone = enemies.find((enemy) => enemy.kind === 'drone')
+      if (testDrone) {
+        testDrone.x = player.x+55
+        testDrone.y = 150
+        testDrone.hp = 0
+        testDrone.deathAge = 0
+        testDrone.crashAt = null
+        testDrone.crashExplosion = false
+        testDrone.grounded = false
+        testDrone.vy = 15
+      }
     }
   }
   renderPlayerHud()

@@ -1,3 +1,5 @@
 .env
 # temporários do Illustrator
 ~ai-*.tmp
+# cópia de segurança criada pelo servidor local a cada salvamento
+assets/sprite-config.bak.json
