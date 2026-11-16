@@ -11,9 +11,10 @@
 <meta name="apple-mobile-web-app-title" content="BULLETZ">
 <meta name="theme-color" content="#0e081a">
 <title>BULLETZ — Divorced Dad Rock</title>
+<script>try{if(localStorage.getItem('bulletz.modoCelular')==='1'&&['localhost','127.0.0.1','[::1]'].indexOf(location.hostname)>=0)document.documentElement.classList.add('modo-celular')}catch(e){}</script>
 <script>try{if(sessionStorage.getItem('bulletz.autostart'))document.documentElement.classList.add('stage-loading');setTimeout(function(){document.documentElement.classList.remove('stage-loading')},10000)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=32">
-<script type="module" src="game.js?v=173"></script>
+<link rel="stylesheet" href="style.css?v=35">
+<script type="module" src="game.js?v=176"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -61,6 +62,7 @@
         <a href="index.html?fase=2&fim">Final 2</a>
         <a href="index.html?fase=2.1">Fase 2.1</a>
         <a href="index.html?fase=2.1&fim">Final 2.1</a>
+        <a href="#" id="phone-toggle" role="button">Modo celular</a>
       </nav>
       <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
       <p id="ios-hint" class="title-hint ios-hint" hidden>TELA CHEIA NO iPHONE: TOQUE EM COMPARTILHAR <span aria-hidden="true">⎙</span> E EM “ADICIONAR À TELA DE INÍCIO”</p>
@@ -89,6 +91,7 @@
           <button id="fullscreen-toggle" type="button">Tela cheia</button>
           <label class="phase-pick">Fase <select id="phase-select" aria-label="Escolher a fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · Em cima da Carreta Furação</option></select></label>
           <button id="test-end" type="button">Teste: final da fase</button>
+          <button id="menu-phone" type="button">Modo celular: desligado</button>
           <button id="exit-menu" type="button">SAIR</button>
         </div>
 
@@ -189,6 +192,33 @@
     <button class="pad-hit pad-pill" id="pad-select" style="left:34.1%;top:66%;width:13.5%;height:13%" aria-label="Tela cheia (Select)"></button>
     <button class="pad-hit pad-pill" id="pad-start" style="left:51%;top:66%;width:13.2%;height:13%" aria-label="Menu (Start)"></button>
   </div>
+  <!-- Painel de teste (só na versão local, com o modo celular ligado): os atalhos que ficam na tela inicial, organizados embaixo do controle -->
+  <aside class="dev-panel" id="dev-panel" aria-label="Ferramentas de teste">
+    <section>
+      <h2>Ferramentas</h2>
+      <div class="dev-grid">
+        <a href="efeitos.html">Teste FX</a>
+        <a href="sprites.html">Sprites</a>
+        <button type="button" id="dev-phone-off">Sair do modo celular</button>
+      </div>
+    </section>
+    <section>
+      <h2>Fases</h2>
+      <div class="dev-grid">
+        <a href="index.html">Fase 1</a>
+        <a href="index.html?fase=2">Fase 2</a>
+        <a href="index.html?fase=2.1">Fase 2.1</a>
+      </div>
+    </section>
+    <section>
+      <h2>Finais de fase</h2>
+      <div class="dev-grid">
+        <a href="index.html?fase=2&fim">Final 2</a>
+        <a href="index.html?fase=2.1&fim">Final 2.1</a>
+        <button type="button" id="dev-test-end">Final da fase atual</button>
+      </div>
+    </section>
+  </aside>
 </main>
 </body>
 </html>

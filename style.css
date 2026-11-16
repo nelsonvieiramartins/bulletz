@@ -44,7 +44,7 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 .start-button:hover{border-color:#fff;filter:brightness(1.08)}
 .start-button:active{transform:translateY(3px);box-shadow:0 1px 0 #8f2a24}
 .title-screen .start-button{animation:pulse 1.2s ease-in-out infinite}
-.title-links{display:flex;gap:clamp(8px,1.4cqw,18px);margin-top:calc(clamp(8px,1.9cqw,26px) * -.2)}
+.title-links{display:flex;flex-wrap:wrap;justify-content:center;max-width:94%;gap:clamp(6px,1.4cqw,18px);margin-top:calc(clamp(8px,1.9cqw,26px) * -.2)}
 .title-links a{font:700 clamp(10px,1.3cqw,15px) var(--mono);letter-spacing:.14em;text-transform:uppercase;text-decoration:none;color:#ffd9a0;background:#1b0f2acc;border:1px solid #ffb35a88;padding:.55em 1.1em;transition:background .15s,border-color .15s,color .15s}
 .title-links a:hover,.title-links a:focus-visible{background:#3a1f4a;border-color:#ffe7a6;color:#fff;outline:none}
 .title-hint{margin:0;font:700 clamp(9px,1.1cqw,13px) var(--mono);letter-spacing:.16em;color:#d9c3e4;opacity:.75}
@@ -162,3 +162,42 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 html.stage-loading body::after,html.stage-reveal body::after{content:"";position:fixed;inset:0;z-index:1000;background:#050408;pointer-events:none}
 html.stage-reveal body::after{animation:stage-reveal .8s ease-out forwards}
 @keyframes stage-reveal{to{opacity:0}}
+
+/* Modo celular (só na versão local de teste): mostra no computador a tela do celular em pé, numa coluna de até 430 px */
+html.modo-celular .stage-shell{left:50%;right:auto;width:min(100vw,430px);transform:translateX(-50%);--u:min(1vw,4.3px);box-shadow:0 0 0 1px #3a2a4a,0 0 40px #000}
+html.modo-celular body{background:#02010a}
+html.modo-celular .touch{display:none}
+html.modo-celular .stage-shell{display:flex;flex-direction:column;justify-content:flex-start;align-items:center;gap:0}
+html.modo-celular .touch{display:none}
+html.modo-celular .stage-shell{padding-top:calc(env(safe-area-inset-top) + calc(2 * var(--u)))}
+html.modo-celular .screen{flex:none;width:calc(100 * var(--u));aspect-ratio:100/112;--hud-inset:3cqw;background:linear-gradient(#0b0614,#1d0f2e)}
+html.modo-celular #game{position:absolute;left:0;bottom:0;width:100%;height:auto;aspect-ratio:300/270}
+html.modo-celular .player-hud{gap:2cqw;align-items:center}
+html.modo-celular .hud-portrait{width:15cqw}
+html.modo-celular .hud-lives{gap:.8cqw;padding-top:0}
+html.modo-celular .hud-lives img{height:8cqw}
+html.modo-celular #hud-score{width:28%}
+html.modo-celular .hud-progress{top:calc(var(--hud-inset) + 9cqw);font-size:2.7cqw}
+html.modo-celular .boss-hud{top:calc(22cqw + 8px)}
+html.modo-celular .boss-hud.heli{top:calc(22cqw + 4px)}
+html.modo-celular .pad{display:block;position:relative;z-index:3;flex:none;margin-top:-10px;width:min(calc(100 * var(--u)),calc((100dvh - calc(112 * var(--u)) - calc(5 * var(--u)) - env(safe-area-inset-top)) * 2));aspect-ratio:2/1;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+html.modo-celular .pad img{display:block;width:100%;height:100%;pointer-events:none}
+html.modo-celular .pad-hit{position:absolute;padding:0;border:0;background:transparent;touch-action:none;-webkit-tap-highlight-color:transparent;cursor:default}
+html.modo-celular .pad-hit:hover{border:0}
+html.modo-celular .pad-round,
+html.modo-celular .pad-pill{position:absolute}
+html.modo-celular .pad-glow.round-on{opacity:1}
+html.modo-celular .pad-hit.on::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;background:radial-gradient(circle,#ffd27acc,#ff8a2a88 45%,transparent 72%)}
+html.modo-celular .pad-round.on::after{border-radius:50%}
+html.modo-celular .pad-pill.on::after{border-radius:30%;background:radial-gradient(ellipse,#ffd27acc,#ff8a2a88 50%,transparent 80%)}
+
+/* Painel de teste do modo celular: embaixo do controle, em grupos, com botões do mesmo tamanho */
+.dev-panel{display:none}
+html.modo-celular .stage-shell{overflow-y:auto;overflow-x:hidden}
+html.modo-celular .title-links{display:none}
+html.modo-celular .dev-panel{display:block;flex:none;width:calc(100 * var(--u));padding:calc(2.4 * var(--u)) calc(3 * var(--u)) calc(6 * var(--u));display:grid;gap:calc(2.2 * var(--u))}
+.dev-panel section{display:grid;gap:calc(1.2 * var(--u,1vw))}
+.dev-panel h2{margin:0;font:700 10px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:#d9c3e4;opacity:.75}
+.dev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.dev-grid a,.dev-grid button{display:flex;align-items:center;justify-content:center;min-height:34px;padding:6px 4px;text-align:center;text-decoration:none;font:700 11px/1.15 var(--mono);letter-spacing:.06em;color:#ffd9a0;background:#1b0f2acc;border:1px solid #ffb35a88;cursor:pointer}
+.dev-grid a:hover,.dev-grid button:hover,.dev-grid a:focus-visible,.dev-grid button:focus-visible{background:#3a1f4a;border-color:#ffe7a6;color:#fff;outline:none}

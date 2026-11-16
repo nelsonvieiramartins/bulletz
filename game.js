@@ -49,7 +49,8 @@ const sample = preview.getContext('2d')
 // o jogo fica maior e o HUD não cobre a ação. Ao girar o aparelho a largura troca na hora (applyViewport).
 const portraitQuery = matchMedia('(pointer:coarse) and (orientation:portrait)')
 const wideWidth = 480, squareWidth = 300
-let width = portraitQuery.matches ? squareWidth : wideWidth
+const isMobileView = () => portraitQuery.matches || document.documentElement.classList.contains('modo-celular')   // 'modo-celular': pré-visualização na versão local
+let width = isMobileView() ? squareWidth : wideWidth
 const height = 270
 const pixelScale = 2
 game.width = width * pixelScale
@@ -236,9 +237,12 @@ const heliWaves = [
 // O helicóptero é desenhado em 340 de largura (2x); na tela estreita do celular em pé encolhe para caber (heliScale).
 const heliHigh = 125, heliLow = 214
 const heliScale = () => width < 480 ? .8 : 1
+// Onde o Edu fica na tela enquanto a câmera o segue (distância da borda esquerda). Na tela estreita do celular em pé ele fica mais recuado
+// (uns 36% da largura) para sobrar tela à frente e os inimigos não aparecerem colados nele.
+const walkLead = () => width < 480 ? 108 : 154
 // Alcance do tiro do Edu: .75 s a 430/s (uns 320 unidades) na tela larga. Na tela estreita do celular em pé (300 de largura, ele fica no meio)
-// o tiro iria muito além da borda e mataria os inimigos antes de entrarem na tela: lá o alcance é de ~150 unidades (contando o cano), até a borda da tela.
-const shotLife = () => width < 480 ? .3 : .75
+// o tiro iria muito além da borda e mataria os inimigos antes de entrarem na tela: lá o alcance é de ~190 unidades (contando o cano): vai até a borda da tela, já que o Edu fica mais recuado.
+const shotLife = () => width < 480 ? .4 : .75
 const bombs = []   // bombas caindo: { x, y, vx, vy, rot }
 const heliSmoke = []   // fumaça do helicóptero caindo e do destroço: { x, y, vx, vy, r0, r1, age, life }
 const heliWreckScale = .8   // o destroço é desenhado um pouco menor que a arte (que tem o tamanho do helicóptero inteiro, com as pás quebradas abertas)
@@ -316,7 +320,7 @@ function buildExplosionBuffers() {
 buildExplosionBuffers()
 // Troca a largura do mundo ao girar o celular: refaz o canvas e os buffers de efeitos (a fase continua)
 function applyViewport() {
-  const next = portraitQuery.matches ? squareWidth : wideWidth
+  const next = isMobileView() ? squareWidth : wideWidth
   if (next === width) return
   width = next
   game.width = width * pixelScale
@@ -324,9 +328,19 @@ function applyViewport() {
   ctx.imageSmoothingEnabled = false
   buildExplosionBuffers()
   gameFx = createGameFx(width, height)
-  camera = Math.max(0, player.x - 145)
+  camera = Math.max(0, player.x - walkLead() + 9)
 }
 portraitQuery.addEventListener('change', applyViewport)
+// Modo celular (só na versão local de teste): liga e desliga a visualização do celular em pé no computador (lembrado no navegador)
+function setPhoneMode(on) {
+  document.documentElement.classList.toggle('modo-celular', on)
+  try { localStorage.setItem('bulletz.modoCelular', on ? '1' : '0') } catch {}
+  applyViewport()
+  const menuPhone = document.querySelector('#menu-phone')
+  if (menuPhone) menuPhone.textContent = 'Modo celular: ' + (on ? 'ligado' : 'desligado')
+  const link = document.querySelector('#phone-toggle')
+  if (link) link.textContent = on ? 'Modo celular ✓' : 'Modo celular'
+}
 const impactDuration = .12
 const flashDuration = .075
 const flashSprite = document.createElement('canvas')
@@ -429,6 +443,17 @@ if (!devTools) {
   document.querySelector('.title-links')?.remove()
   document.querySelector('.phase-pick')?.remove()
   document.querySelector('#test-end')?.remove()
+  document.querySelector('#phone-toggle')?.remove()
+  document.querySelector('#menu-phone')?.remove()
+  document.querySelector('#dev-panel')?.remove()
+} else {
+  const phoneNow = document.documentElement.classList.contains('modo-celular')
+  document.querySelector('#menu-phone').textContent = 'Modo celular: ' + (phoneNow ? 'ligado' : 'desligado')
+  document.querySelector('#phone-toggle').textContent = phoneNow ? 'Modo celular ✓' : 'Modo celular'
+  document.querySelector('#menu-phone').onclick = () => setPhoneMode(!document.documentElement.classList.contains('modo-celular'))
+  document.querySelector('#phone-toggle').onclick = (event) => { event.preventDefault(); setPhoneMode(!document.documentElement.classList.contains('modo-celular')) }
+  document.querySelector('#dev-phone-off').onclick = () => setPhoneMode(false)
+  document.querySelector('#dev-test-end').onclick = () => { if (mode === 'play') document.querySelector('#test-end').click() }   // dispara o final da fase em que o Edu está
 }
 const musicToggle = select('#music-toggle')
 const musicVolume = select('#music-volume')
@@ -583,7 +608,7 @@ function reset(all = true) {
   enemyShots.length = 0
   Object.assign(player,{x:respawnX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false,mover:null})
   playerLevelY = player.y
-  camera = onTruck ? clamp(player.x - cameraLeadNow(), 0, cameraMaxNow()) : Math.max(0, player.x - 145)
+  camera = onTruck ? clamp(player.x - cameraLeadNow(), 0, cameraMaxNow()) : Math.max(0, player.x - walkLead() + 9)
   shots.length = 0
   impacts.length = 0
   sparks.length = 0
@@ -1446,7 +1471,7 @@ function update(dt) {
       camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
     }
   }
-  else camera += (clamp(player.x - 154,0,end+50-width) - camera) * Math.min(1,dt * 6)
+  else camera += (clamp(player.x - walkLead(),0,end+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
   if (!onTruck && nextProgress !== progress) {
     progress = nextProgress
