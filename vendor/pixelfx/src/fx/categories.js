@@ -21,5 +21,12 @@ export const categories = [
   { id: "ui", name: "ui", blurb: "level ups, numbers, toasts, countdowns" },
   { id: "pickups", name: "pickups", blurb: "coins, gems, chests, potions" },
   { id: "transitions", name: "transitions", blurb: "wipes, irises, dissolves" },
+  { id: "spritefusion", name: "sprite fusion", blurb: "official Sprite Fusion effects: blood, sparkle, embers, dash, blink" },
+  { id: "codex-game", name: "codex game", blurb: "pixel-vfx-codex pack: game" },
+  { id: "codex-ultimate", name: "codex ultimate", blurb: "pixel-vfx-codex pack: ultimate" },
+  { id: "codex-mass", name: "codex mass", blurb: "pixel-vfx-codex pack: mass" },
+  { id: "codex-scale", name: "codex scale", blurb: "pixel-vfx-codex pack: scale" },
+  { id: "codex-twist", name: "codex twist", blurb: "pixel-vfx-codex pack: twist" },
+  { id: "codex-armory", name: "codex armory", blurb: "pixel-vfx-codex pack: armory" },
   { id: "critters", name: "critters", blurb: "slimes, bats, ghosts, frogs" },
 ];

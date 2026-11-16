@@ -1276,6 +1276,8 @@ function updatePaused(dt) {
     previewFrame = Math.floor(previewTime)
   }
   const pad = readPad(dt)
+  if (mode === 'menu') { if (menuPadInput(pad)) return }   // no menu de pausa o controle anda pelos botões
+  else if (pad.jump && mode === 'title') { startGame(); return }
   if (!pad.restart) return
   if (mode === 'title') startGame()
   else resumeGame()
@@ -1308,6 +1310,7 @@ function update(dt) {
     previewFrame = Math.floor(previewTime)
   }
   const pad = readPad(dt)
+  if (!gameOverScreen.hidden) { menuPadInput(pad); return }
   if (pad.restart) {
     openMenu()
     return
@@ -1552,6 +1555,87 @@ function showGameOver() {
   }, 1500)
 }
 function hideGameOver() { gameOverScreen.hidden = true; gameOverScreen.classList.remove('ready') }
+
+// Cursor nas telas de botões (fim de jogo e menu de pausa) para jogar sem mouse: setas/A-D/S-W movem, Enter/Espaço confirmam; no controle,
+// direcional ou analógico movem e o botão de pulo (ou START) confirma. O botão selecionado ganha um contorno que pisca, no formato do sprite (e o brilho do botão).
+const menuCursor = document.createElement('div')
+menuCursor.id = 'menu-cursor'
+menuCursor.hidden = true
+document.querySelector('.screen').appendChild(menuCursor)
+let menuSel = 0, menuKey = null, menuPadDir = 0
+function menuItems() {
+  if (!gameOverScreen.hidden) return [...gameOverScreen.querySelectorAll('button')].filter((b) => !b.hidden)
+  if (mode === 'menu') return [...document.querySelectorAll('#menu .menu-actions button')].filter((b) => !b.hidden && b.offsetParent !== null)
+  return []
+}
+function moveMenu(step) {
+  const items = menuItems()
+  if (!items.length) return
+  menuSel = (menuSel + step + items.length) % items.length
+  items[menuSel].focus({ preventScroll: true })
+  sfx.play('checkpoint', { volume: .25 })
+}
+function confirmMenu() {
+  const items = menuItems()
+  if (items[menuSel]) items[menuSel].click()
+}
+function updateMenuCursor() {
+  const items = menuItems()
+  const key = items.length ? (gameOverScreen.hidden ? 'menu' : 'gameover') : null
+  if (key !== menuKey) { menuKey = key; menuSel = 0; if (items[0]) items[0].focus({ preventScroll: true }) }   // abre sempre no primeiro botão
+  menuCursor.hidden = !key || (key === 'gameover' && !gameOverScreen.classList.contains('ready'))   // no fim de jogo só depois que os botões surgem
+  if (!items.length) return
+  menuSel = Math.min(menuSel, items.length - 1)
+  items.forEach((b, i) => b.classList.toggle('sel', i === menuSel))
+  const r = items[menuSel].getBoundingClientRect(), s = document.querySelector('.screen').getBoundingClientRect()
+  // no fim de jogo o contorno fica ATRÁS dos botões (dentro da tela de fim de jogo), para não cobrir o selo ×3; no menu de pausa fica por cima
+  const host = key === 'gameover' ? gameOverScreen : document.querySelector('.screen')
+  if (menuCursor.parentElement !== host) host.insertBefore(menuCursor, host.firstChild)
+  const art = ['iniciar', 'continuar', 'reiniciar'].find((n) => items[menuSel].classList.contains('art-' + n))
+  menuCursor.classList.toggle('shape', !!art)
+  if (art) {
+    // botões com arte: o contorno acompanha o formato do sprite (assets/botoes/*-contorno.png: a silhueta do botão dilatada, 16 px de folga em volta)
+    const kx = r.width / 410, ky = r.height / 174
+    menuCursor.style.backgroundImage = `url(assets/botoes/${art}-contorno.png?v=3)`
+    menuCursor.style.left = Math.round(r.left - s.left - 16 * kx) + 'px'
+    menuCursor.style.top = Math.round(r.top - s.top - 16 * ky) + 'px'
+    menuCursor.style.width = Math.round(442 * kx) + 'px'
+    menuCursor.style.height = Math.round(206 * ky) + 'px'
+  } else {   // botões comuns do menu: moldura retangular
+    const pad = 2
+    menuCursor.style.backgroundImage = ''
+    menuCursor.style.left = Math.round(r.left - s.left - pad) + 'px'
+    menuCursor.style.top = Math.round(r.top - s.top - pad) + 'px'
+    menuCursor.style.width = Math.round(r.width + pad * 2) + 'px'
+    menuCursor.style.height = Math.round(r.height + pad * 2) + 'px'
+  }
+}
+// o mouse também move a seleção
+for (const overlay of [gameOverScreen, document.querySelector('#menu')]) {
+  overlay.addEventListener('mouseover', (event) => {
+    const i = menuItems().indexOf(event.target.closest('button'))
+    if (i >= 0) menuSel = i
+  })
+}
+window.addEventListener('keydown', (event) => {
+  if (!menuItems().length || event.altKey || event.ctrlKey || event.metaKey) return
+  if (event.target.closest?.('select, input, textarea')) return   // não atrapalha os controles do menu (volume, música, seletor de fase)
+  const prev = ['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'], next = ['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS']
+  if (prev.includes(event.code)) moveMenu(-1)
+  else if (next.includes(event.code)) moveMenu(1)
+  else if (['Enter', 'NumpadEnter', 'Space'].includes(event.code)) confirmMenu()
+  else return
+  event.preventDefault()
+  event.stopPropagation()
+}, true)
+// controle: chamada a cada quadro enquanto há uma tela de botões
+function menuPadInput(pad) {
+  const dir = Math.abs(pad.direction) > .5 ? Math.sign(pad.direction) : pad.crouch ? 1 : 0
+  if (dir && dir !== menuPadDir) moveMenu(dir)
+  menuPadDir = dir
+  if (pad.jump || pad.restart) { confirmMenu(); return true }
+  return false
+}
 continueButton.onclick = () => {
   saveContinues(continuesLeft() - 1)
   reset(true)
@@ -3156,6 +3240,7 @@ function tick(now) {
   else updatePaused(dt)
   render()
   renderPlayerHud()
+  updateMenuCursor()
   requestAnimationFrame(tick)
 }
 Promise.all([

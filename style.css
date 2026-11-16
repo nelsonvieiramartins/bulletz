@@ -154,7 +154,7 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 .art-btn::before{content:url(assets/botoes/iniciar-hover.png) url(assets/botoes/iniciar-press.png) url(assets/botoes/continuar-hover.png) url(assets/botoes/continuar-press.png) url(assets/botoes/reiniciar-hover.png) url(assets/botoes/reiniciar-press.png);position:absolute;width:0;height:0;overflow:hidden;visibility:hidden}
 .art-btn[data-count]::after{content:attr(data-count);position:absolute;right:2%;top:-6%;min-width:2.4em;padding:.15em .4em;font:900 clamp(10px,1.5cqw,16px)/1.2 var(--mono);letter-spacing:.04em;text-align:center;color:#ffe7a6;background:#1a0a10;border:2px solid #ffb35a;border-radius:99px;box-shadow:0 0 8px #ff8a2a88}
 .title-screen .start-button.art-btn{animation:art-pulse 1.2s ease-in-out infinite}
-.gameover .start-button.art-btn{width:clamp(120px,30cqw,300px);animation:go-button .5s 1.5s steps(5,end) both,art-pulse 1.2s 2s ease-in-out infinite}
+.gameover .start-button.art-btn{width:clamp(120px,30cqw,300px);animation:go-button .5s 1.5s steps(5,end) both}   /* só entra; quem pisca é o contorno do selecionado */
 @keyframes art-pulse{50%{filter:brightness(1.12) drop-shadow(0 0 12px #ffb25a99)}}
 @media(prefers-reduced-motion:reduce){.title-screen .start-button.art-btn,.gameover .start-button.art-btn{animation:none}}
 
@@ -201,3 +201,17 @@ html.modo-celular .dev-panel{display:block;flex:none;width:calc(100 * var(--u));
 .dev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .dev-grid a,.dev-grid button{display:flex;align-items:center;justify-content:center;min-height:34px;padding:6px 4px;text-align:center;text-decoration:none;font:700 11px/1.15 var(--mono);letter-spacing:.06em;color:#ffd9a0;background:#1b0f2acc;border:1px solid #ffb35a88;cursor:pointer}
 .dev-grid a:hover,.dev-grid button:hover,.dev-grid a:focus-visible,.dev-grid button:focus-visible{background:#3a1f4a;border-color:#ffe7a6;color:#fff;outline:none}
+
+/* Cursor das telas de botões (teclado e controle): um contorno pixelado que pisca em volta do botão selecionado */
+#menu-cursor{position:absolute;z-index:30;pointer-events:none;box-sizing:border-box;border:3px solid #fff2c9;outline:3px solid #1a0a10;box-shadow:0 0 0 3px #ff9a3c,0 0 18px 4px #ffb25acc,inset 0 0 12px #ffb25a88;animation:cursor-blink .7s steps(1,end) infinite}
+#menu-cursor[hidden]{display:none}
+#menu-cursor.shape{border:0;outline:0;box-shadow:none;background:center/100% 100% no-repeat;animation:cursor-shape-blink .7s steps(1,end) infinite}
+@keyframes cursor-shape-blink{50%{filter:brightness(1.35) saturate(1.2)}}
+@keyframes cursor-blink{50%{border-color:#ffb35a;box-shadow:0 0 0 3px #fff2c9,0 0 26px 6px #ff8a2acc,inset 0 0 16px #ff8a2a99}}
+.art-iniciar.sel{background-image:url(assets/botoes/iniciar-sel.png?v=1)}
+.art-continuar.sel{background-image:url(assets/botoes/continuar-sel.png?v=1)}
+.art-reiniciar.sel{background-image:url(assets/botoes/reiniciar-sel.png?v=1)}
+.menu-actions button.sel{border-color:#ffe7a6;color:#fff;box-shadow:0 0 12px #ffb25acc}
+@media(prefers-reduced-motion:reduce){#menu-cursor{animation:none}}
+#gameover #menu-cursor{z-index:0}
+.gameover .start-button.art-btn{z-index:1}

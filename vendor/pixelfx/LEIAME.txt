@@ -15,3 +15,16 @@ Modificação local: src/fx/projectiles/muzzle-smg.js ganhou a opção casingFlo
 - cannonball: opcao `ball: false` (so o clarao, as faiscas e a fumaca do estouro, sem a bala); usada em gamefx.blast na batida da carreta.
 - small-explosion: usada (size 0.6) nas bombas do helicoptero do chefe da Fase 1 (gamefx.bomb).
 - campfire: opcao `props: false` (so o fogo, a fumaca e as brasas, sem toras nem cama de brasas); usada em gamefx.fire sobre o helicoptero destruido.
+
+Pasta spritefusion/ (efeitos oficiais do Sprite Fusion, MIT, (c) 2026 Hugo Duprez, https://www.spritefusion.com/pixel-art-vfx)
+  Os codigos originais (TypeScript) e a versao compilada ficam em effects/spritefusion/ (blood, sparkle, embers, movement).
+  Cada arquivo de spritefusion/ e so um adaptador (_sf.js) que cria o efeito oficial na origem e desenha no quadro.
+  blood = golpe sangrento · sparkle = brilho magico · embers = brasas e cinzas (loop) · dash/blink = investida e teletransporte.
+
+Pasta codex/ (pixel-vfx-codex, https://github.com/888wing/pixel-vfx-codex, MIT, (c) 2026 Pixel VFX Codex contributors)
+  138 efeitos 3D em pixel art de um motor proprio (rasterizador por software). Os originais ficam intactos em vendor/pixel-vfx-codex/
+  (LICENSE, engine/pxfx.js, engine/kit.js, fx/*.js). O adaptador codex/_codex.js carrega o motor so quando um efeito e usado,
+  renderiza com fundo transparente (camera 2D de frente, 160x100; opcao mode '25d' = 240x150) e copia os pixels para o quadro.
+  Opcoes: scale (1 a 3, aumenta cada pixel), mode ('2d' ou '25d'). Origem do efeito = chao, no centro da base. Categorias: codex-game,
+  codex-ultimate, codex-mass, codex-scale, codex-twist, codex-armory. Lista de nomes em codex/list.js. Os 64 'game' recriam a 00GameDevs
+  (MIT, (c) 2026 00GameDevs) e o motor adapta tecnicas do pixel-plays (MIT, (c) 2026 Amir Mushich): avisos mantidos em vendor/pixel-vfx-codex/LICENSE.

@@ -245,9 +245,18 @@ import * as critters_slime from "./critters/slime.js";
 import * as critters_snake from "./critters/snake.js";
 import * as critters_wisp from "./critters/wisp.js";
 
+import * as spritefusion_blood from "./spritefusion/blood.js";
+import * as spritefusion_sparkle from "./spritefusion/sparkle.js";
+import * as spritefusion_embers from "./spritefusion/embers.js";
+import * as spritefusion_dash from "./spritefusion/dash.js";
+import * as spritefusion_blink from "./spritefusion/blink.js";
+
+import { codexEffects } from "./codex/index.js";
+
 export { categories } from "./categories.js";
 
 export const effects = {
+  ...codexEffects,
   "moves/arrow-shot": moves_arrow_shot,
   "moves/dash-strike": moves_dash_strike,
   "moves/earth-stomp": moves_earth_stomp,
@@ -492,4 +501,9 @@ export const effects = {
   "critters/slime": critters_slime,
   "critters/snake": critters_snake,
   "critters/wisp": critters_wisp,
+  "spritefusion/blood": spritefusion_blood,
+  "spritefusion/sparkle": spritefusion_sparkle,
+  "spritefusion/embers": spritefusion_embers,
+  "spritefusion/dash": spritefusion_dash,
+  "spritefusion/blink": spritefusion_blink,
 };
