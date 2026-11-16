@@ -25,16 +25,17 @@ function disposeInstance() {
   try { music.pause() } catch {}
   window.__bulletzAudio = { soundContext, shotSound, deathGruntSound, deathScreamSound }   // a próxima instância reaproveita o áudio já liberado
 }
-function goToStage(fase, { autostart = true } = {}) {
+function goToStage(fase, { autostart = true, extra = {} } = {}) {
   const params = new URLSearchParams(location.search)
   if (fase) params.set('fase', fase); else params.delete('fase')
   params.delete('fim')
+  for (const [k, v] of Object.entries(extra)) params.set(k, v)
   const url = location.pathname + (params.toString() ? '?' + params.toString() : '')
   history.replaceState(null, '', url)
   try { if (autostart) sessionStorage.setItem('bulletz.autostart', '1'); else sessionStorage.removeItem('bulletz.autostart') } catch {}
   if (autostart) document.documentElement.classList.add('stage-loading')   // preto enquanto a nova fase carrega
   disposeInstance()
-  import('./game.js?boot=' + Date.now()).catch(() => { location.href = url })   // plano B: recarrega a página
+  import('./game.js?boot=' + Date.now()).catch((error) => { console.error('Troca de fase sem recarregar falhou:', error); try { sessionStorage.setItem('bulletz.bootError', String(error?.stack || error)) } catch {} location.href = url })   // plano B: recarrega a página
 }
 
 const select = (selector) => document.querySelector(selector)
@@ -351,14 +352,16 @@ if (stage === 2) {
   label.replaceChildren(choose)
 }
 // Seletor de fase no menu: recarrega a página na fase escolhida (mantém os outros parâmetros da URL, como ?debug)
-const phaseSelect = select('#phase-select')
-phaseSelect.value = onTruck ? '2.1' : String(stage)
-phaseSelect.onchange = () => {
-  const params = new URLSearchParams(location.search)
-  if (phaseSelect.value === '1') params.delete('fase')
-  else params.set('fase', phaseSelect.value)
-  const query = params.toString()
-  location.href = location.pathname + (query ? '?' + query : '')
+const phaseSelect = select('#phase-select')   // sem ?debug o seletor é removido da página (e continua removido nas trocas de fase)
+if (phaseSelect) {
+  phaseSelect.value = onTruck ? '2.1' : String(stage)
+  phaseSelect.onchange = () => {
+    const params = new URLSearchParams(location.search)
+    if (phaseSelect.value === '1') params.delete('fase')
+    else params.set('fase', phaseSelect.value)
+    const query = params.toString()
+    location.href = location.pathname + (query ? '?' + query : '')
+  }
 }
 // Na versão do jogo os atalhos de fase ficam escondidos; aparecem só com ?debug (as fases se encadeiam sozinhas)
 if (!new URLSearchParams(location.search).has('debug')) {
@@ -650,6 +653,9 @@ function convoyTruckWidth() { return sprites.truck.width / pixelScale }
 function startConvoy() {
   const c = convoyCfg, px = player.x
   player.trigger = false
+  // quem está na tela e à frente some: a rua fica livre para as caminhonetes e a carreta (o som da colisão continua)
+  for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].x >= camera - 20) enemies.splice(i, 1)
+  enemyShots.length = 0
   convoy = {
     phase: 'lock', t: 0, px, v: c.speed, truckX: px - 830, stopX: px - 110, wheel: 0, hits: 0, jump: false, deck: null, decel: null,
     pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], hit: false, vx: 0, vy: 0, dy: 0, rot: 0, tilt: 0, age: 0 }))
@@ -863,6 +869,8 @@ function showFullscreenState() {
 }
 
 select('#start').onclick = startGame
+// Botão de teste do menu: abre a Fase 2 direto na cena final (caminhonetes, carreta, ESTÁGIO CONCLUÍDO) e segue para a 2.1, sem sair da tela cheia
+select('#test-end2').onclick = () => goToStage('2', { extra: { fim: '1' } })
 // iPhone/iPod: o Safari não tem API de tela cheia; só abrindo pelo ícone da Tela de Início (modo app) o jogo ocupa a tela toda
 {
   const iphone = /iPhone|iPod/.test(navigator.userAgent)
