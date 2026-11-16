@@ -1,6 +1,6 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js'
-import { createGameFx } from './gamefx.js'
+import { createGameFx } from './gamefx.js?v=2'
 import { applySpriteConfig } from './spriteconfig.js'
 import { fase2 } from './fase2.js'
 import { fase21 } from './fase21.js'
@@ -2502,6 +2502,7 @@ function updateCombat(dt) {
           enemyShots.length = 0
           announce('O COBRADOR CAIU · AVANCE',2.5)
           sfx.play('bossDown')
+          gameFx.huge({ x: boss.x, floor: groundY })   // o chefe some numa explosão enorme
         } else {
           score += enemyTypes[target.type].points
           if (target.kind === 'patrol' || target.kind === 'melee') {

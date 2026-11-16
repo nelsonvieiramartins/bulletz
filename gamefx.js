@@ -18,6 +18,7 @@ import * as shatterWipe from './vendor/pixelfx/src/fx/transitions/shatter-wipe.j
 import * as levelUp from './vendor/pixelfx/src/fx/ui/level-up.js'
 import * as cannonball from './vendor/pixelfx/src/fx/projectiles/cannonball.js'
 import * as smallExplosion from './vendor/pixelfx/src/fx/explosions/small-explosion.js'
+import * as bigExplosion from './vendor/pixelfx/src/fx/explosions/big-explosion.js'
 import * as campfire from './vendor/pixelfx/src/fx/fire/campfire.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 
@@ -147,6 +148,11 @@ export function createGameFx(width, height) {
     /** Explosão de bomba no chão (small-explosion do pixelfx): clarão, fogo que vira fumaça, faíscas e pedras. size = tamanho (1 = o do efeito). */
     bomb({ x, floor, size = .6 }) {
       oneShots.push(createFx(smallExplosion, { x, y: floor, seed: seed(), size }))
+      if (oneShots.length > maxOneShots) oneShots.shift()
+    },
+    /** Explosão enorme no chão (big-explosion do pixelfx: cúpula branca, bola de fogo, coluna de fumaça em cogumelo, pedras e fogo que fica): a morte do chefe. */
+    huge({ x, floor }) {
+      oneShots.push(createFx(bigExplosion, { x, y: floor, seed: seed() }))
       if (oneShots.length > maxOneShots) oneShots.shift()
     },
     /** Fogo contínuo com fumaça e brasas (campfire do pixelfx, sem as toras) com a base em x,y; height = altura das chamas. Fica até clear(). */
