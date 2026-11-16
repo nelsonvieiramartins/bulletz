@@ -510,6 +510,7 @@ function reset(all = true) {
     resetWaves()
     resetSuspension()
     resetEnding()
+    resetConvoy()
     outSeq = null
     hideGameOver()
   }
@@ -624,12 +625,118 @@ function updateStageOut(dt) {
   const s = outSeq
   s.t += dt
   gameFx.update(dt)   // a fase já parou (finish): o update normal não chega até o fim, então os efeitos andam aqui
-  if (!s.banner && s.t >= stageOut.pause) { s.banner = true; s.t = 0; gameFx.banner(); sfx.play('victory') }
+  if (!s.banner && s.t >= (s.pause ?? stageOut.pause)) { s.banner = true; s.t = 0; gameFx.banner(); sfx.play('victory') }
   else if (s.banner && !s.wiped && s.t >= stageOut.bannerAt) { s.wiped = true; gameFx.startWipe() }
   else if (s.wiped && gameFx.wipeTime >= stageOut.wipeEnd) {
     outSeq = null
     goToStage(nextStage[onTruck ? '2.1' : String(stage)])   // sem recarregar: a tela cheia continua
   }
+}
+// Fim da Fase 2: o Edu chega e o controle trava. Três caminhonetes fecham a rua em três faixas do asfalto (de trás para a frente),
+// a Carreta Furação entra pela esquerda, atropela as caminhonetes (elas voam para longe) e para ao lado dele. Ele salta no andar
+// de baixo, a carreta volta a andar com ele, a câmera acompanha um pouco e ela sai de cena: ESTÁGIO CONCLUÍDO e vai para a Fase 2.1.
+const convoyCfg = {
+  lanes: [227, 238, 249],        // base (pés/rodas) de cada caminhonete: faixa de trás, do meio e da frente
+  offsets: [60, 95, 130],        // x da ponta de cada uma, à frente do Edu
+  sheets: ['car09', 'car08', 'car11'],   // as três picapes da folha de carros
+  lock: 1.3,                     // s parado, com a câmera abrindo a cena, antes da carreta entrar
+  speed: 380,                    // velocidade da carreta ao bater
+  settle: .7,                    // s parada antes do Edu subir
+  deckX: 15, deckY: 188, deckW: 530,   // andar de baixo da carreta (mesmas medidas do fase2.js)
+  rideWait: .6, accel: 300, maxSpeed: 440, followFor: 2.2
+}
+let convoy = null
+function convoyTruckWidth() { return sprites.truck.width / pixelScale }
+function startConvoy() {
+  const c = convoyCfg, px = player.x
+  player.trigger = false
+  convoy = {
+    phase: 'lock', t: 0, px, v: c.speed, truckX: px - 830, stopX: px - 110, wheel: 0, hits: 0, jump: false, deck: null, decel: null,
+    pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], hit: false, vx: 0, vy: 0, dy: 0, rot: 0, vr: 0 }))
+  }
+}
+function resetConvoy() {
+  if (convoy?.deck) { const i = movers.indexOf(convoy.deck); if (i >= 0) movers.splice(i, 1) }
+  convoy = null
+}
+function hitPickup(c, p, front) {
+  p.hit = true
+  c.hits++
+  p.vx = c.v * 1.25 + 60 + Math.random() * 90
+  p.vy = -(170 + Math.random() * 90)
+  p.vr = 2.5 + Math.random() * 3
+  c.v *= .94
+  gameFx.slam({ x: front, floor: p.y - 6, reach: 70 })
+  gameFx.crit({ x: front, floor: p.y - 6, flip: false, height: 26 })
+  sfx.play(c.hits === convoyCfg.sheets.length ? 'bossDown' : 'heavyBlast')
+}
+function updateConvoy(dt) {
+  const c = convoy, cfg = convoyCfg
+  if (c.phase === 'done') return
+  c.t += dt
+  for (const p of c.pickups) {
+    if (!p.hit) continue
+    p.x += p.vx * dt
+    p.dy += p.vy * dt
+    p.vy += 620 * dt
+    p.rot += p.vr * dt
+  }
+  const move = () => {
+    c.truckX += c.v * dt
+    c.wheel += c.v / fase21.speed * fase21.wheelSpin * dt
+    if (c.deck) { c.deck.dx = c.truckX + cfg.deckX - c.deck.cx; c.deck.cx += c.deck.dx }
+  }
+  if (c.phase === 'lock') {
+    if (c.t >= cfg.lock) { c.phase = 'ram'; c.t = 0 }
+  } else if (c.phase === 'ram') {
+    move()
+    const front = c.truckX + convoyTruckWidth()
+    for (const p of c.pickups) if (!p.hit && front >= p.x + 8) hitPickup(c, p, p.x + 8)
+    if (c.hits === c.pickups.length) {   // depois da última batida freia até parar ao lado do Edu
+      if (c.decel === null) c.decel = c.v * c.v / (2 * Math.max(40, c.stopX - c.truckX))
+      c.v = Math.max(0, c.v - c.decel * dt)
+      if (c.v === 0 || c.truckX >= c.stopX) { c.v = 0; c.phase = 'settle'; c.t = 0 }
+    }
+  } else if (c.phase === 'settle') {
+    if (c.t >= cfg.settle) {
+      c.phase = 'board'; c.t = 0
+      c.deck = { cx: c.truckX + cfg.deckX, cy: cfg.deckY, w: cfg.deckW, dx: 0, manual: true }   // o andar de baixo: o Edu salta nele
+      movers.push(c.deck)
+      c.jump = true
+    }
+  } else if (c.phase === 'board') {
+    if (player.grounded && player.mover === c.deck) { c.phase = 'ride'; c.t = 0 }
+    else if (c.t > 3) { c.jump = true; c.t = 1 }   // não pousou: salta de novo
+  } else if (c.phase === 'ride' || c.phase === 'exit') {
+    if (c.t >= cfg.rideWait) { c.v = Math.min(cfg.maxSpeed, c.v + cfg.accel * dt); move() }
+    if (c.phase === 'ride' && c.t >= cfg.followFor) c.phase = 'exit'   // a câmera para de seguir: ela sai de cena
+    if (c.phase === 'exit' && c.truckX > camera + width + 40) {
+      c.phase = 'done'
+      finish = true
+      outSeq = { t: 0, banner: false, wiped: false, pause: .3 }
+    }
+  }
+}
+function drawConvoy() {
+  const c = convoy
+  const drawPickup = (p) => {
+    const img = sprites[p.sheet], w = img.width / pixelScale, h = img.height / pixelScale
+    const left = Math.round(p.x - camera)
+    if (left > width + 260 || left + w < -260) return
+    ctx.save()
+    ctx.translate(left + w / 2, p.y + p.dy - h / 2)
+    ctx.rotate(p.rot)
+    ctx.scale(-1, 1)   // viradas para o Edu
+    ctx.drawImage(img, -w / 2, -h / 2, w, h)
+    ctx.restore()
+  }
+  for (const p of c.pickups) if (!p.hit) drawPickup(p)
+  const img = sprites.truck, h = img.height / pixelScale, left = Math.round(c.truckX - camera), top = groundY + 4 - h
+  if (left < width && left + convoyTruckWidth() > 0) {
+    ctx.drawImage(img, left, top, convoyTruckWidth(), h)
+    drawWheelsAt(left, top, c.wheel)
+  }
+  for (const p of c.pickups) if (p.hit) drawPickup(p)
 }
 function startEnding() {
   const v0 = roadSpeed
@@ -1038,6 +1145,7 @@ function readPad(dt) {
 
 function updateMovers() {
   for (const m of movers) {
+    if (m.manual) continue   // controlado por script (andar da carreta no fim da Fase 2)
     const t = .5 - .5*Math.cos(elapsed*Math.PI*2/m.period + m.phase)
     const nx = m.x + m.ax*t
     const ny = m.y + m.ay*t
@@ -1061,10 +1169,14 @@ function updatePaused(dt) {
 
 // Teste do final da 2.1: index.html?fase=2.1&fim pula as ondas e começa direto na freada até o Vikings Pub
 const testEnding = onTruck && new URLSearchParams(location.search).has('fim')
+// Teste do final da Fase 2: index.html?fase=2&fim começa direto na cena das caminhonetes e da carreta
+const testConvoy = stage === 2 && !onTruck && new URLSearchParams(location.search).has('fim')
 function update(dt) {
   elapsed += dt
   if (testEnding && !finish && !endSeq) { finish = true; startEnding() }
   updateMovers()
+  if (testConvoy && !finish && !convoy) { finish = true; startConvoy() }
+  if (convoy) updateConvoy(dt)
   if (outSeq) updateStageOut(dt)
   if (onTruck) {
     if (endSeq) updateEnding(dt)
@@ -1086,13 +1198,15 @@ function update(dt) {
     if (playerFall.age < fallDuration) updatePlayerFall(dt)
     return
   }
-  if (lives === 0 || (finish && !endSeq)) return
-  const scripted = !!endSeq   // no final da 2.1 o Edu anda sozinho
+  const convoyActive = !!convoy && convoy.phase !== 'done'
+  if (lives === 0 || (finish && !endSeq && !convoyActive)) return
+  const scripted = !!endSeq || convoyActive   // nos finais da 2 e da 2.1 o Edu anda sozinho
   const right = !scripted && active('ArrowRight','KeyD')
   const left = !scripted && active('ArrowLeft','KeyA')
-  const direction = scripted ? endSeq.dir : right || left ? Number(right) - Number(left) : pad.direction
+  const direction = scripted ? (endSeq ? endSeq.dir : 0) : right || left ? Number(right) - Number(left) : pad.direction
   const wantsCrouch = !scripted && (active('ArrowDown','KeyS') || pad.crouch)
   if (!scripted && (jumpPressed || pad.jump)) player.buffer = 0.13
+  if (convoyActive && convoy.jump) { player.buffer = 0.13; convoy.jump = false }
   jumpPressed = false
   player.buffer -= dt
   player.coyote = player.grounded ? 0.09 : player.coyote - dt
@@ -1111,7 +1225,7 @@ function update(dt) {
     player.y = player.mover.cy
   }
   const oldY = player.y
-  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],endSeq && endSeq.free ? Infinity : fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,end)
+  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],endSeq && endSeq.free ? Infinity : fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,convoyActive ? Infinity : end)
   player.vy += 790 * dt
   player.y += player.vy * dt
   player.grounded = false
@@ -1169,7 +1283,8 @@ function update(dt) {
   }
   if (player.x >= goal && boss.hp === 0 && !finish && player.grounded) {
     finish = true
-    outSeq = { t: 0, banner: false, wiped: false }
+    if (stage === 2 && !onTruck) startConvoy()   // Fase 2: três caminhonetes fecham a rua e a Carreta Furação abre caminho
+    else outSeq = { t: 0, banner: false, wiped: false }
   }
   if (player.grounded && Math.abs(player.vx) > 8) {
     player.phase = (player.phase + Math.abs(player.vx) * dt / 12) % 8
@@ -1230,6 +1345,12 @@ function update(dt) {
   while (sparks.length && sparks[0].t <= 0) sparks.shift()
   // a câmera segue o Edu pela carreta; no final, depois que ele desce, segue até o fim do desenho do pub (e ele sai de tela)
   if (onTruck) camera += (clamp(player.x - fase21.cameraLead,0,endSeq && endSeq.free ? pubCameraEnd() : fase21.cameraMax) - camera) * Math.min(1,dt * 6)
+  else if (convoy) {   // a câmera abre a cena à frente do Edu, acompanha a carreta saindo e depois fica parada
+    if (convoy.phase !== 'exit' && convoy.phase !== 'done') {
+      const target = convoy.phase === 'ride' ? player.x - 110 : convoy.px - 110
+      camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
+    }
+  }
   else camera += (clamp(player.x - 154,0,end+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
   if (!onTruck && nextProgress !== progress) {
@@ -2133,6 +2254,7 @@ function drawEnemies(scroll) {
   }
 }
 function drawMover(m,scroll) {
+  if (m.manual) return
   const left = Math.round(m.cx-scroll)
   const top = Math.round(m.cy)
   if (left + m.w < 0 || left > width) return
@@ -2358,13 +2480,15 @@ function drawStage2Background() {
     }
   }
   if (onTruck) drawTruckWheels()
+  if (convoy) drawConvoy()
 }
 // Fase 2.1: gira o miolo de cada roda sobre a arte da carreta (a arte original fica por baixo, parada)
 function drawTruckWheels() {
   const truck = stage2Props.find(p => p.sheet === 'truck')
   const h = sprites.truck.height / pixelScale
-  const left = Math.round(truck.x - camera * truck.factor), top = truck.y - h
-  const angle = wheelAngle
+  drawWheelsAt(Math.round(truck.x - camera * truck.factor), truck.y - h, wheelAngle)
+}
+function drawWheelsAt(left, top, angle) {
   fase21.wheels.forEach((wheel, i) => {
     const image = sprites['wheel' + (i + 1)]
     const half = wheel.size / pixelScale / 2
@@ -2507,7 +2631,7 @@ Promise.all([
     ...(onTruck ? [loadImage('fofaoRun','assets/fofao/corrida.png'), loadImage('fofaoAttack','assets/fofao/ataque.png'), loadImage('fofaoAttack2','assets/fofao/ataque2.png'),
       loadImage('fofaoFall','assets/fofao/queda.png'),
       loadImage('chapolimRun','assets/chapolim/corrida.png'), loadImage('chapolimAttack','assets/chapolim/ataque.png'), loadImage('chapolimFall','assets/chapolim/queda.png'), loadImage('chapolimJump','assets/chapolim/salto.png')] : []),
-    ...(onTruck ? fase21.wheels.map((wheel, i) => loadImage('wheel' + (i + 1),'assets/fase2/rodas/' + wheel.file)) : [])
+    ...fase21.wheels.map((wheel, i) => loadImage('wheel' + (i + 1),'assets/fase2/rodas/' + wheel.file))
   ] : [loadImage('bg','assets/cidade.webp')]),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
   loadImage('patrolFall','assets/patrulheiro-ex-queda.png'),
@@ -2547,6 +2671,7 @@ Promise.all([
       get finish() { return finish },
       get endSeq() { return endSeq },
       get outSeq() { return outSeq },
+      get convoy() { return convoy },
       endStage() { finish = true; outSeq = { t: 0, banner: false, wiped: false } },
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },
