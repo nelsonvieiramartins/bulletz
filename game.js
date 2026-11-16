@@ -45,10 +45,10 @@ const ctx = game.getContext('2d')
 const sample = preview.getContext('2d')
 // O mundo continua em 480x270; o canvas tem o dobro de pixels para o Edu (sprites de ~133px)
 // aparecer 1:1 em alta definição, enquanto cenário e inimigos são ampliados 2x.
-// No celular em pé (e só nele) o mundo mostrado é mais estreito (4:3, 360 de largura): a tela fica mais quadrada, o jogo maior e o HUD
-// cabe sem cortar. Ao girar o aparelho a largura troca na hora (applyViewport).
+// No celular em pé (e só nele) o mundo mostrado é mais estreito (300 de largura) e a tela quase quadrada, com uma faixa em cima só para o HUD:
+// o jogo fica maior e o HUD não cobre a ação. Ao girar o aparelho a largura troca na hora (applyViewport).
 const portraitQuery = matchMedia('(pointer:coarse) and (orientation:portrait)')
-const wideWidth = 480, squareWidth = 360
+const wideWidth = 480, squareWidth = 300
 let width = portraitQuery.matches ? squareWidth : wideWidth
 const height = 270
 const pixelScale = 2
@@ -1397,7 +1397,7 @@ function update(dt) {
   if (onTruck) camera += (clamp(player.x - cameraLeadNow(),0,endSeq && endSeq.free ? pubCameraEnd() : cameraMaxNow()) - camera) * Math.min(1,dt * 6)
   else if (convoy) {   // a câmera abre a cena à frente do Edu, acompanha a carreta saindo e depois fica parada
     if (convoy.phase !== 'exit' && convoy.phase !== 'done') {
-      const lead = width < wideWidth ? 60 : 110   // na tela estreita o Edu fica mais perto da borda para sobrar rua à frente
+      const lead = width < wideWidth ? 50 : 110   // na tela estreita o Edu fica mais perto da borda para sobrar rua à frente
       const target = convoy.phase === 'ride' ? player.x - lead : convoy.px - lead
       camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
     }

@@ -109,11 +109,13 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
 .pad-glow{position:absolute;pointer-events:none;border-radius:50%;opacity:0;background:radial-gradient(circle,#ffd27acc,#ff8a2a88 45%,transparent 72%);mix-blend-mode:screen;transition:opacity .05s}
 .pad-glow.on{opacity:1}
 @media(pointer:coarse) and (orientation:portrait){
-  .stage-shell{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2.5vw}
+  .stage-shell{display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;gap:0}
   .touch{display:none}
   .stage-shell{padding-top:env(safe-area-inset-top)}
-  .screen{width:100vw;aspect-ratio:4/3}
-  .pad{display:block;position:relative;flex:none;width:min(100vw,calc((100dvh - 75vw - 5vw - env(safe-area-inset-top)) * 2));aspect-ratio:2/1;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  /* tela quase quadrada: uma faixa escura em cima só para o HUD (foto, vidas, pontuação) e o jogo (300x270) embaixo, maior */
+  .screen{width:100vw;aspect-ratio:100/108;background:linear-gradient(#0b0614,#1d0f2e)}
+  #game{position:absolute;left:0;bottom:0;width:100%;height:auto;aspect-ratio:300/270}
+  .pad{display:block;position:relative;flex:none;width:min(100vw,calc((100dvh - 108vw - 5vw - env(safe-area-inset-top)) * 2));aspect-ratio:2/1;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   .pad img{display:block;width:100%;height:100%;pointer-events:none}
   .pad-hit{position:absolute;padding:0;border:0;background:transparent;touch-action:none;-webkit-tap-highlight-color:transparent;cursor:default}
   .pad-hit:hover{border:0}
