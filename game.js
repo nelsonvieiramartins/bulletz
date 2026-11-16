@@ -652,7 +652,7 @@ function startConvoy() {
   player.trigger = false
   convoy = {
     phase: 'lock', t: 0, px, v: c.speed, truckX: px - 830, stopX: px - 110, wheel: 0, hits: 0, jump: false, deck: null, decel: null,
-    pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], hit: false, vx: 0, vy: 0, dy: 0, rot: 0, vr: 0 }))
+    pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], hit: false, vx: 0, vy: 0, dy: 0, rot: 0, tilt: 0, age: 0 }))
   }
 }
 function resetConvoy() {
@@ -663,11 +663,11 @@ function hitPickup(c, p, front) {
   p.hit = true
   c.hits++
   p.vx = c.v * 1.25 + 60 + Math.random() * 90
-  p.vy = -(170 + Math.random() * 90)
-  p.vr = 2.5 + Math.random() * 3
+  p.vy = -(150 + Math.random() * 60)
+  p.tilt = .55 + Math.random() * .2   // a ponta de frente empina até uns 30-40 graus e fica assim: nada de girar
+  p.age = 0
   c.v *= .94
-  gameFx.slam({ x: front, floor: p.y - 6, reach: 70 })
-  gameFx.crit({ x: front, floor: p.y - 6, flip: false, height: 26 })
+  gameFx.blast({ x: front, floor: p.y - 4, height: 16 })
   sfx.play(c.hits === convoyCfg.sheets.length ? 'bossDown' : 'heavyBlast')
 }
 function updateConvoy(dt) {
@@ -679,7 +679,8 @@ function updateConvoy(dt) {
     p.x += p.vx * dt
     p.dy += p.vy * dt
     p.vy += 620 * dt
-    p.rot += p.vr * dt
+    p.age += dt
+    p.rot = p.tilt * (1 - Math.exp(-9 * p.age))
   }
   const move = () => {
     c.truckX += c.v * dt

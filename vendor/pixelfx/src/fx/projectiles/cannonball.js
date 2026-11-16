@@ -19,6 +19,7 @@ export const meta = {
     iron: ["#141218", "#2c2a34", "#4c4a58", "#8a8898"],
     height: 12,
     seed: 4,
+    ball: true, // false: só o clarão, as faíscas e a fumaça do estouro, sem a bala
   },
 };
 
@@ -28,7 +29,7 @@ export function create(o) {
   const F = fit(o.palette, 9), SM = fit(o.smoke, 7), IR = fit(o.iron, 4), H = o.height, MY = -H, R = new Rng(o.seed);
   const ps = new Particles({ rng: R, ground: () => 0, sparks: [F[7], F[6], F[4], F[3]] }), smoke = new Smoke(R), lights = new Lights();
   const ca = Math.cos(ANG), sa = Math.sin(ANG), right = meta.size[0] - meta.origin[0] - 3, top = -meta.origin[1] + 3;
-  const ball = { x: 4, y: MY, vx: ca * 330, vy: sa * 330, out: false };
+  const ball = { x: 4, y: MY, vx: ca * 330, vy: sa * 330, out: o.ball === false };
   const jit = Array.from({ length: 16 }, () => R.next());
   lights.add(12, MY - 2, 44, hex("#ffb060"), 1, 0.35);
   lights.add(6, MY, 18, WHITE, 0.9, 0.08);
