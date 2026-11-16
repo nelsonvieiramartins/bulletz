@@ -23,6 +23,8 @@ function disposeInstance() {
   disposed = true
   for (const [target, type, listener, options] of window.__bulletzListeners.splice(0)) target.removeEventListener(type, listener, options)
   try { music.pause() } catch {}
+  try { menuCursor.remove() } catch {}   // o contorno do menu é desta instância: sem isso ele ficava parado na tela inicial
+  for (const b of document.querySelectorAll('button.sel')) b.classList.remove('sel')
   window.__bulletzAudio = { soundContext, shotSound, deathGruntSound, deathScreamSound }   // a próxima instância reaproveita o áudio já liberado
 }
 function goToStage(fase, { autostart = true, extra = {} } = {}) {
