@@ -113,7 +113,7 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
   .touch{display:none}
   .stage-shell{padding-top:calc(env(safe-area-inset-top) + 2vw)}
   /* tela quase quadrada: uma faixa escura em cima só para o HUD (foto, vidas, pontuação) e o jogo (300x270) embaixo, maior */
-  .screen{width:100vw;aspect-ratio:100/112;--hud-inset:3cqw;background:linear-gradient(#0b0614,#1d0f2e)}
+  .screen{flex:none;width:100vw;aspect-ratio:100/112;--hud-inset:3cqw;background:linear-gradient(#0b0614,#1d0f2e)}
   #game{position:absolute;left:0;bottom:0;width:100%;height:auto;aspect-ratio:300/270}
   /* HUD maior na faixa de cima (22% da largura de altura) */
   .player-hud{gap:2cqw;align-items:center}
@@ -123,7 +123,7 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
   #hud-score{width:28%}
   .hud-progress{top:calc(var(--hud-inset) + 9cqw);font-size:2.7cqw}
   .boss-hud{top:calc(22cqw + 8px)}
-  .pad{display:block;position:relative;flex:none;width:min(100vw,calc((100dvh - 112vw - 5vw - env(safe-area-inset-top)) * 2));aspect-ratio:2/1;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  .pad{display:block;position:relative;z-index:3;flex:none;margin-top:-10px;width:min(100vw,calc((100dvh - 112vw - 5vw - env(safe-area-inset-top)) * 2));aspect-ratio:2/1;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   .pad img{display:block;width:100%;height:100%;pointer-events:none}
   .pad-hit{position:absolute;padding:0;border:0;background:transparent;touch-action:none;-webkit-tap-highlight-color:transparent;cursor:default}
   .pad-hit:hover{border:0}
