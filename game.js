@@ -223,14 +223,14 @@ let invulnerability = 0
 // Fase 1: o chefe é o Oficial de Justiça no helicóptero (assets/boss-heli, montado por tools/montar_heli.py). Fase 2: O Cobrador a pé.
 const heliBoss = stage === 1
 const heliMeta = heliBoss ? await (await fetch('assets/boss-heli/heli.json')).json() : null
-const bossHp = heliBoss ? 30 : 24
+const bossHp = heliBoss ? 36 : 24
 const boss = { x: 6680, y: groundY, hp: bossHp, delay: .75, volley: 0 }
-// Ondas que o Oficial chama (esquerda e direita); depois da última a última se repete
+// As 3 ondas que o Oficial chama (esquerda e direita); ao fim da terceira (depois do bombardeio e da descida) o helicóptero é destruído
+const heliCameoX = 4150   // 60% da fase: o helicóptero passa soltando bombas (a mesma investida do chefe, com a porta fechada)
 const heliWaves = [
   { left: ['patrol', 'patrol'], right: ['patrol', 'patrol'] },
   { left: ['patrol', 'elite'], right: ['patrol', 'patrol', 'patrol'] },
-  { left: ['elite', 'patrol', 'patrol'], right: ['elite', 'patrol'] },
-  { left: ['elite', 'elite', 'patrol'], right: ['elite', 'elite', 'patrol'] }
+  { left: ['elite', 'patrol', 'patrol'], right: ['elite', 'patrol', 'patrol'] }   // a 3ª é a última: no fim dela o helicóptero cai
 ]
 // Altura dos esquis: lá em cima (o casco fica acima do alcance até dos tiros dados em salto) e baixo (exposto, na altura dos tiros do Edu).
 // O helicóptero é desenhado em 340 de largura (2x); na tela estreita do celular em pé encolhe para caber (heliScale).
@@ -241,7 +241,7 @@ const heliSmoke = []   // fumaça do helicóptero caindo e do destroço: { x, y,
 const heliWreckScale = .8   // o destroço é desenhado um pouco menor que a arte (que tem o tamanho do helicóptero inteiro, com as pás quebradas abertas)
 let farHeli = null   // o helicóptero que cruza o fundo depois do 1º checkpoint (porta fechada): { delay, sx, y }
 function resetHeli() {
-  boss.heli = { phase: 'idle', t: 0, wave: 0, pending: [], pose: 0, sway: 0, calm: 0, exposedT: 0, vx: 0, tilt: 0, hitUntil: 0, dyingT: 0, nextBlast: 0, gone: false, face: 1, sx: 0, dir: 1, runs: 0, cols: [], smokeT: 0 }
+  boss.heli = { phase: 'idle', t: 0, wave: 0, pending: [], pose: 0, sway: 0, calm: 0, exposedT: 0, vx: 0, tilt: 0, hitUntil: 0, dyingT: 0, nextBlast: 0, gone: false, face: 1, sx: 0, dir: 1, runs: 0, cols: [], smokeT: 0, cameo: false, cameoDone: false }
   farHeli = null
   bombs.length = 0
   heliSmoke.length = 0
@@ -2077,6 +2077,12 @@ function heliBlast(x, y, size) {
 function updateHeli(dt, bossActive) {
   const h = boss.heli
   updateHeliSmoke(dt)
+  if (!h.cameoDone && h.phase === 'idle' && !bossActive && player.x >= heliCameoX && player.x < heliCameoX + 150) {
+    h.cameoDone = true; h.cameo = true; h.cols = []   // sobrevoo a 60% da fase: avisa, volta pela esquerda e atravessa soltando bombas
+    h.phase = 'warn'; h.t = 0
+    announce('BOMBARDEIO!', 1.2)
+    sfx.play('bossShot', { dx: 0 })
+  }
   for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1)   // quem fugiu da tela some
   if (h.phase === 'gone') {   // o destroço solta uma coluna de fumaça pelas chamas
     h.smokeT -= dt
@@ -2099,7 +2105,7 @@ function updateHeli(dt, bossActive) {
   const dying = h.phase === 'dying'
   const flyby = h.phase === 'leave' || h.phase === 'warn' || h.phase === 'strafe'
   if (!dying) {
-    player.x = clamp(player.x, bossArena - 20, bossArena + 430)   // a arena: ele não deixa o Edu passar nem voltar
+    if (!h.cameo) player.x = clamp(player.x, bossArena - 20, bossArena + 430)   // a arena: ele não deixa o Edu passar nem voltar
     for (const e of enemies) if (e.heli && e.hp > 0) { e.min = player.x - 300; e.max = player.x + 300 }   // os chamados correm até o Edu
     if (flyby) { /* o voo lateral controla a posição abaixo */ } else {
     const exposed = h.phase === 'dive' || h.phase === 'exposed'
@@ -2107,7 +2113,7 @@ function updateHeli(dt, bossActive) {
     const tx = camera + width * .5 + 30 + Math.sin(h.sway * .9) * (exposed ? 16 : 42)
     const ty = exposed ? heliLow : heliHigh
     boss.x += (tx - boss.x) * Math.min(1, dt * (h.phase === 'enter' ? 1.4 : 2.2))
-    boss.y += (ty - boss.y) * Math.min(1, dt * (h.phase === 'enter' ? 1.6 : 2.4))
+    boss.y += (ty - boss.y) * Math.min(1, dt * (h.phase === 'enter' ? 1.6 : exposed || h.phase === 'rise' ? 4 : 2.4))   // desce e sobe rápido
     h.vx = (boss.x - oldX) / Math.max(dt, 1e-3)
     h.tilt += (Math.max(-1, Math.min(1, h.vx / 120)) * .08 - h.tilt) * Math.min(1, dt * 6)
     }
@@ -2131,7 +2137,7 @@ function updateHeli(dt, bossActive) {
     boss.y += (heliHigh - 25 - boss.y) * Math.min(1, dt * 2)
     h.vx = 520
     h.tilt += (.08 - h.tilt) * Math.min(1, dt * 6)
-    if (h.sx > width + heliHalfWidth() + 60) { h.phase = 'warn'; h.t = 0; announce('BOMBARDEIO!', 1.2); sfx.play('bossShot', { dx: 0 }) }
+    if (h.sx > width + heliHalfWidth() + 60) { h.phase = 'warn'; h.t = 0; announce('BOMBARDEIO!', 1.2); sfx.play('bossShot', { dx: 0 }); h.cols = [] }
   } else if (h.phase === 'warn') {
     boss.x = camera + width + 800   // fora da tela, só o aviso: as marcas vermelhas no chão mostram onde as bombas vão cair
     if (!h.cols.length) {
@@ -2146,7 +2152,7 @@ function updateHeli(dt, bossActive) {
     }
   } else if (h.phase === 'strafe') {
     // atravessa a tela toda soltando uma bomba em cada coluna marcada; as bombas caem retas e explodem no chão, sem mirar no Edu
-    h.pose = 5
+    h.pose = h.cameo ? heliMeta.poses - 1 : 5   // no sobrevoo a 60% a porta fica fechada
     const speed = 330
     h.sx += speed * dt
     boss.x = camera + h.sx
@@ -2160,19 +2166,26 @@ function updateHeli(dt, bossActive) {
       sfx.play('patrolShot', { dx: boss.x - player.x })
     }
     if (h.sx > width + heliHalfWidth() + 80) {
-      h.phase = 'return'; h.t = 0; h.face = 1; h.sx = width + heliHalfWidth() + 60
-      boss.x = camera + h.sx
+      if (h.cameo) {   // o sobrevoo acabou: o helicóptero vai embora e só volta no chefe
+        h.cameo = false; h.phase = 'idle'; h.t = 0; boss.x = 6680; boss.y = heliHigh
+      } else {
+        h.phase = 'return'; h.t = 0; h.face = 1; h.sx = width + heliHalfWidth() + 60
+        boss.x = camera + h.sx
+      }
     }
   } else if (h.phase === 'return') {
     h.pose = 0
     if (h.t > 1.6) { h.phase = 'dive'; h.t = 0; h.cols = [] }
   } else if (h.phase === 'dive') {
     h.pose = player.x < boss.x ? 4 : 5   // aponta para baixo, para o lado do Edu
-    if (boss.y > heliLow - 3) { h.phase = 'exposed'; h.t = 0; h.exposedT = boss.hp > bossHp * .66 ? 4.5 : 5.5 }
+    if (boss.y > heliLow - 3) { h.phase = 'exposed'; h.t = 0; h.exposedT = 2.8 }   // pouco tempo na linha de tiro
   } else if (h.phase === 'exposed') {
     const alt = Math.floor(h.t / .45) % 2   // alterna as duas variações do gesto, sempre apontando para o lado do Edu
     h.pose = elapsed < h.hitUntil ? 7 : player.x < boss.x ? (alt ? 8 : 4) : (alt ? 9 : 5)
-    if (h.t > h.exposedT) { h.phase = 'rise'; h.t = 0 }
+    if (h.t > h.exposedT) {
+      if (h.wave >= heliWaves.length) { boss.hp = 0; startHeliDeath() }   // fim da 3ª onda: o helicóptero não aguenta mais e cai
+      else { h.phase = 'rise'; h.t = 0 }
+    }
   } else if (h.phase === 'rise') {
     h.pose = 1
     if (boss.y < heliHigh + 4) startHeliOrder()
@@ -3154,6 +3167,7 @@ Promise.all([
       get outSeq() { return outSeq },
       get convoy() { return convoy },
       get farHeli() { return farHeli },
+      get heliWaveCount() { return heliWaves.length },
       endStage() { finish = true; outSeq = { t: 0, banner: false, wiped: false } },
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },
