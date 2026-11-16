@@ -898,6 +898,8 @@ function showFullscreenState() {
 }
 
 select('#start').onclick = startGame
+// SAIR (menu de pausa): volta para a tela de abertura, na Fase 1, sem sair da tela cheia
+select('#exit-menu').onclick = () => goToStage(null, { autostart: false })
 // Botão de teste do menu: abre a Fase 2 direto na cena final (caminhonetes, carreta, ESTÁGIO CONCLUÍDO) e segue para a 2.1, sem sair da tela cheia
 // Botão de teste do menu: dispara o final da fase em que o Edu está (1 → 2, 2 → 2.1 ou o final da 2.1), no ponto onde ele está
 if (select('#test-end')) {
@@ -2698,6 +2700,7 @@ Promise.all([
   updateMovers()
   let autostart = null
   try { autostart = sessionStorage.getItem('bulletz.autostart'); sessionStorage.removeItem('bulletz.autostart') } catch {}
+  setMode('title')   // numa troca de fase o menu da instância anterior pode ter ficado aberto
   if (!autostart && !onTruck && stage === 1) { try { sessionStorage.removeItem('bulletz.continues') } catch {} }   // partida nova: 3 continues
   if (autostart) {
     startGame()
