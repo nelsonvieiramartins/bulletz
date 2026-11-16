@@ -363,10 +363,13 @@ if (phaseSelect) {
     location.href = location.pathname + (query ? '?' + query : '')
   }
 }
-// Na versão do jogo os atalhos de fase ficam escondidos; aparecem só com ?debug (as fases se encadeiam sozinhas)
-if (!new URLSearchParams(location.search).has('debug')) {
+// Ferramentas de teste (links de FX e sprites, atalhos de fase, seletor de fase e botão do final da Fase 2): só na versão local
+// (localhost) ou com ?debug. No jogo publicado fica apenas o INICIAR JOGO, e as fases se encadeiam sozinhas.
+const devTools = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || new URLSearchParams(location.search).has('debug')
+if (!devTools) {
   document.querySelector('.title-links')?.remove()
   document.querySelector('.phase-pick')?.remove()
+  document.querySelector('#test-end2')?.remove()
 }
 const musicToggle = select('#music-toggle')
 const musicVolume = select('#music-volume')
@@ -870,7 +873,7 @@ function showFullscreenState() {
 
 select('#start').onclick = startGame
 // Botão de teste do menu: abre a Fase 2 direto na cena final (caminhonetes, carreta, ESTÁGIO CONCLUÍDO) e segue para a 2.1, sem sair da tela cheia
-select('#test-end2').onclick = () => goToStage('2', { extra: { fim: '1' } })
+if (select('#test-end2')) select('#test-end2').onclick = () => goToStage('2', { extra: { fim: '1' } })
 // iPhone/iPod: o Safari não tem API de tela cheia; só abrindo pelo ícone da Tela de Início (modo app) o jogo ocupa a tela toda
 {
   const iphone = /iPhone|iPod/.test(navigator.userAgent)
