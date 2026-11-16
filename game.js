@@ -754,6 +754,8 @@ const convoyCfg = {
   lanes: [227, 238, 249],        // base (pés/rodas) de cada caminhonete: faixa de trás, do meio e da frente
   offsets: [60, 95, 130],        // x da ponta de cada uma, à frente do Edu
   sheets: ['car09', 'car08', 'car11'],   // as três picapes da folha de carros
+  // rodas de cada picape na imagem original [x, y, raio] (px da imagem): são recortadas da própria arte e giram enquanto a picape chega e freia
+  wheels: { car09: [[92.5, 104.5, 28], [342.5, 104.5, 28]], car08: [[104, 103, 28], [355, 103, 28]], car11: [[99, 106, 29], [365, 106, 29]] },
   lock: 1.5,                     // s parado, com a câmera abrindo a cena, antes da carreta entrar
   speed: 380,                    // velocidade da carreta ao bater
   settle: .7,                    // s parada antes do Edu subir
@@ -761,6 +763,23 @@ const convoyCfg = {
   rideWait: .6, accel: 300, maxSpeed: 440, followFor: 2.2
 }
 let convoy = null
+const pickupWheelCache = {}
+function pickupWheels(sheet) {
+  if (!pickupWheelCache[sheet]) {
+    const img = sprites[sheet]
+    pickupWheelCache[sheet] = convoyCfg.wheels[sheet].map(([cx, cy, r]) => {
+      const c = document.createElement('canvas')
+      c.width = c.height = Math.ceil(r * 2)
+      const g = c.getContext('2d')
+      g.beginPath()
+      g.arc(r, r, r, 0, Math.PI * 2)
+      g.clip()
+      g.drawImage(img, r - cx, r - cy)
+      return { canvas: c, cx, cy, r }
+    })
+  }
+  return pickupWheelCache[sheet]
+}
 function convoyTruckWidth() { return sprites.truck.width / pixelScale }
 function startConvoy() {
   const c = convoyCfg, px = player.x
@@ -851,7 +870,7 @@ function drawConvoy() {
     const img = sprites[p.sheet], w = img.width / pixelScale, h = img.height / pixelScale
     // durante o 'lock' as caminhonetes chegam dirigindo pela direita e freiam nos lugares (freada suave: ease-out)
     const k = c.phase === 'lock' ? Math.min(1, Math.max(0, (c.t - p.enterAt) / .85)) : 1
-    const slide = Math.pow(1 - k, 3) * (width + 240)
+    const slide = Math.pow(1 - k, 2) * (width + 240)   // freada: quadrática (a roda não passa de ~115° por quadro, senão parece girar ao contrário)
     const left = Math.round(p.x - camera + slide)
     if (left > width + 260 || left + w < -260) return
     ctx.save()
@@ -859,6 +878,15 @@ function drawConvoy() {
     ctx.rotate(p.rot)
     ctx.scale(-1, 1)   // viradas para o Edu
     ctx.drawImage(img, -w / 2, -h / 2, w, h)
+    // rodas girando: o giro acompanha o quanto a picape já andou na entrada, então é rápido no começo e vai diminuindo até parar na freada
+    for (const wheel of pickupWheels(p.sheet)) {
+      const rA = wheel.r / pixelScale
+      ctx.save()
+      ctx.translate(-w / 2 + wheel.cx / pixelScale, -h / 2 + wheel.cy / pixelScale)
+      ctx.rotate(((width + 240) - slide) / rA)
+      ctx.drawImage(wheel.canvas, -rA, -rA, rA * 2, rA * 2)
+      ctx.restore()
+    }
     ctx.restore()
   }
   for (const p of c.pickups) if (!p.hit) drawPickup(p)
