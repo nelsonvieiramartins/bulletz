@@ -2,7 +2,7 @@ import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js'
 import { createGameFx } from './gamefx.js?v=2'
 import { applySpriteConfig } from './spriteconfig.js'
-import { fase2 } from './fase2.js?v=2'
+import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js'
 import { createMidiPlayer } from './midiplayer.js'
 
@@ -754,7 +754,7 @@ const convoyCfg = {
   lanes: [227, 238, 249],        // base (pés/rodas) de cada caminhonete: faixa de trás, do meio e da frente
   offsets: [60, 95, 130],        // x da ponta de cada uma, à frente do Edu
   sheets: ['car09', 'car08', 'car11'],   // as três picapes da folha de carros
-  lock: 1.3,                     // s parado, com a câmera abrindo a cena, antes da carreta entrar
+  lock: 1.5,                     // s parado, com a câmera abrindo a cena, antes da carreta entrar
   speed: 380,                    // velocidade da carreta ao bater
   settle: .7,                    // s parada antes do Edu subir
   deckX: 15, deckY: 188, deckW: 530,   // andar de baixo da carreta (mesmas medidas do fase2.js)
@@ -770,7 +770,7 @@ function startConvoy() {
   enemyShots.length = 0
   convoy = {
     phase: 'lock', t: 0, px, v: c.speed, truckX: px - 830, stopX: px - 110, wheel: 0, hits: 0, jump: false, deck: null, decel: null,
-    pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], hit: false, vx: 0, vy: 0, dy: 0, rot: 0, tilt: 0, age: 0 }))
+    pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], enterAt: .05 + i * .22, hit: false, vx: 0, vy: 0, dy: 0, rot: 0, tilt: 0, age: 0 }))
   }
 }
 // Teste de boss (só na versão local): o Edu vai para a arena do chefe e a vida dele fica quase no fim
@@ -849,7 +849,10 @@ function drawConvoy() {
   const c = convoy
   const drawPickup = (p) => {
     const img = sprites[p.sheet], w = img.width / pixelScale, h = img.height / pixelScale
-    const left = Math.round(p.x - camera)
+    // durante o 'lock' as caminhonetes chegam dirigindo pela direita e freiam nos lugares (freada suave: ease-out)
+    const k = c.phase === 'lock' ? Math.min(1, Math.max(0, (c.t - p.enterAt) / .85)) : 1
+    const slide = Math.pow(1 - k, 3) * (width + 240)
+    const left = Math.round(p.x - camera + slide)
     if (left > width + 260 || left + w < -260) return
     ctx.save()
     ctx.translate(left + w / 2, p.y + p.dy - h / 2)
@@ -1508,7 +1511,7 @@ function update(dt) {
       camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
     }
   }
-  else camera += (clamp(player.x - walkLead(),0,walkEnd+50-width) - camera) * Math.min(1,dt * 6)
+  else camera += (clamp(player.x - walkLead(),0,convoyWalk ? Infinity : end+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
   if (!onTruck && nextProgress !== progress) {
     progress = nextProgress

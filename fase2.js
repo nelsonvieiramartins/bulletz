@@ -59,7 +59,7 @@ const c15 = car(1, 5110, true), c16 = car(4, 5290)
 const c17 = car(8, 5500, true), c18 = car(5, 5800, true), c19 = car(9, 5960)
 
 const platforms = [
-  [0,groundY,7500,true],      // a rua inteira, sem quedas (passa do fim da fase: depois do chefe o Edu ainda anda até as caminhonetes)
+  [0,groundY,8400,true],      // a rua inteira, sem quedas (passa do fim da fase: depois do chefe o Edu ainda anda até as caminhonetes)
   // Carreta Furação: suba pelo andar de baixo, pelos armários amarelos e chegue ao teto
   truck(15,180,530),    // andar de baixo
   truck(428,145,118),   // armários amarelos
