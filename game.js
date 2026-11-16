@@ -2044,30 +2044,46 @@ function updateFlee(e, dt) {
   }
   if (e.x < camera - 90 || e.x > camera + width + 90) e.gone = true
 }
-function spawnHeliSmoke(x, y, { vx = 8, vy = -34, r0 = 5, r1 = 22, life = 1.6 } = {}) {
-  if (heliSmoke.length > 160) heliSmoke.shift()
-  heliSmoke.push({ x, y, vx: vx + (Math.random() - .5) * 12, vy: vy * (.8 + Math.random() * .4), r0, r1, age: 0, life: life * (.8 + Math.random() * .4) })
+function spawnHeliSmoke(x, y, { vx = 8, vy = -34, r0 = 5, r1 = 22, life = 1.6, wild = 0 } = {}) {
+  if (heliSmoke.length > 190) heliSmoke.shift()
+  // cada baforada é uma mancha deformada: vários lóbulos sobrepostos de tamanhos diferentes, esticada de lado e balançando
+  const n = 3 + Math.floor(Math.random() * (3 + wild * 3))
+  const lobes = Array.from({ length: n }, () => ({ dx: (Math.random() - .5) * 1.5, dy: (Math.random() - .5) * 1.1, k: .38 + Math.random() * .75, grow: .7 + Math.random() * .9 }))
+  heliSmoke.push({
+    x, y, vx: vx + (Math.random() - .5) * (12 + wild * 26), vy: vy * (.6 + Math.random() * .9),
+    r0, r1: r1 * (.75 + Math.random() * (.5 + wild * .35)), age: 0, life: life * (.65 + Math.random() * .8),
+    lobes, stretch: .85 + Math.random() * (.7 + wild), rot: (Math.random() - .5) * .8, spin: (Math.random() - .5) * .9,
+    ph: Math.random() * 6.3, sway: 5 + Math.random() * (10 + wild * 16), dark: Math.random() < .3 ? 14 : 0
+  })
 }
 function updateHeliSmoke(dt) {
   for (let i = heliSmoke.length - 1; i >= 0; i--) {
     const p = heliSmoke[i]
     p.age += dt
     if (p.age >= p.life) { heliSmoke.splice(i, 1); continue }
-    p.x += (p.vx + 12 * p.age) * dt   // o vento empurra a coluna para o lado
+    p.x += (p.vx + 6 * p.age + Math.sin(p.age * 3.1 + p.ph) * p.sway) * dt   // o vento empurra e a coluna ondula
     p.y += p.vy * dt
     p.vy *= Math.max(0, 1 - dt * .5)
+    p.rot += p.spin * dt
   }
 }
 function drawHeliSmoke(scroll) {
   ctx.save()
   for (const p of heliSmoke) {
     const k = p.age / p.life, r = p.r0 + (p.r1 - p.r0) * Math.min(1, k * 1.3)
-    const shade = Math.round(34 + 70 * k)
-    ctx.globalAlpha = Math.min(.82, (1 - k) * 1.1) * .8
+    const shade = Math.round(34 + 70 * k + p.dark)
+    ctx.globalAlpha = Math.min(.8, (1 - k) * 1.05) * .5   // várias manchas se somam: cada lóbulo é mais leve
     ctx.fillStyle = `rgb(${shade},${shade - 4},${shade + 10})`
-    ctx.beginPath()
-    ctx.arc(Math.round(p.x - scroll), Math.round(p.y), Math.round(r), 0, Math.PI * 2)
-    ctx.fill()
+    ctx.save()
+    ctx.translate(Math.round(p.x - scroll), Math.round(p.y))
+    ctx.rotate(p.rot)
+    ctx.scale(p.stretch, 1)
+    for (const l of p.lobes) {
+      ctx.beginPath()
+      ctx.arc(Math.round(l.dx * r), Math.round(l.dy * r), Math.max(1, Math.round(r * l.k * (.6 + l.grow * k * .8))), 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
   }
   ctx.restore()
 }
@@ -2087,8 +2103,13 @@ function updateHeli(dt, bossActive) {
   if (h.phase === 'gone') {   // o destroço solta uma coluna de fumaça pelas chamas
     h.smokeT -= dt
     if (h.smokeT <= 0 && h.fireSpots) {
-      h.smokeT = .08
-      for (const f of h.fireSpots) spawnHeliSmoke(f.x + (Math.random() - .5) * 14, f.y - 14, { vy: -32, r0: 6, r1: 30, life: 3.4 })
+      h.smokeT = .05 + Math.random() * .12   // intervalo irregular: a fumaça sai em baforadas, não em fio
+      h.fireSpots.forEach((f, i) => {
+        if (Math.random() < .25) return
+        spawnHeliSmoke(f.x + (Math.random() - .5) * 18, f.y - 14, i === 0
+          ? { vy: -30, r0: 6, r1: 31, life: 3.2, wild: .8, vx: 4 }   // a da frente (nariz): maior, mais torta e mais solta
+          : { vy: -32, r0: 6, r1: 30, life: 3.4, wild: .3 })
+      })
     }
     return
   }
