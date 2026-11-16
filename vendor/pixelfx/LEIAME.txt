@@ -14,3 +14,4 @@ Modificação local: src/fx/projectiles/muzzle-smg.js ganhou a opção casingFlo
 - level-up: opcao `titleOnly` (so o texto e o brilho ao redor dele, sem pilar, aneis nem heroi); usada em gamefx.checkpoint.
 - cannonball: opcao `ball: false` (so o clarao, as faiscas e a fumaca do estouro, sem a bala); usada em gamefx.blast na batida da carreta.
 - small-explosion: usada (size 0.6) nas bombas do helicoptero do chefe da Fase 1 (gamefx.bomb).
+- campfire: opcao `props: false` (so o fogo, a fumaca e as brasas, sem toras nem cama de brasas); usada em gamefx.fire sobre o helicoptero destruido.

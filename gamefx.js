@@ -18,6 +18,7 @@ import * as shatterWipe from './vendor/pixelfx/src/fx/transitions/shatter-wipe.j
 import * as levelUp from './vendor/pixelfx/src/fx/ui/level-up.js'
 import * as cannonball from './vendor/pixelfx/src/fx/projectiles/cannonball.js'
 import * as smallExplosion from './vendor/pixelfx/src/fx/explosions/small-explosion.js'
+import * as campfire from './vendor/pixelfx/src/fx/fire/campfire.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 
 const maxOneShots = 28
@@ -35,6 +36,7 @@ export function createGameFx(width, height) {
   const context = canvas.getContext('2d')
   const image = context.createImageData(width, height)
   const oneShots = []
+  const ambient = []   // efeitos contínuos (fogo e fumaça em cima do helicóptero destruído)
   let muzzle = null
   // faixa de texto (combo-counter) e transição de tela (shatter-wipe, que tem tela própria de 320x180, esticada para a do jogo)
   let banner = null, bannerTime = 0, bannerLength = 0
@@ -147,6 +149,10 @@ export function createGameFx(width, height) {
       oneShots.push(createFx(smallExplosion, { x, y: floor, seed: seed(), size }))
       if (oneShots.length > maxOneShots) oneShots.shift()
     },
+    /** Fogo contínuo com fumaça e brasas (campfire do pixelfx, sem as toras) com a base em x,y; height = altura das chamas. Fica até clear(). */
+    fire({ x, y, height = 26 }) {
+      ambient.push(createFx(campfire, { x, y, seed: seed(), height, props: false }))
+    },
     /** Golpe crítico (crit-hit) onde o ataque acertou: x, chão do alvo e altura do peito. */
     crit({ x, floor, flip, height = 28 }) {
       oneShots.push(createFx(critHit, { x, y: floor, flip, seed: seed(), height }))
@@ -180,6 +186,7 @@ export function createGameFx(width, height) {
         if (checkpoint.done()) checkpoint = null
       }
       if (wipe) wipe.update(dt)
+      for (const fx of ambient) fx.update(dt)
       for (let i = oneShots.length - 1; i >= 0; i--) {
         const fx = oneShots[i]
         fx.update(dt)
@@ -188,6 +195,7 @@ export function createGameFx(width, height) {
     },
     clear() {
       oneShots.length = 0
+      ambient.length = 0
       muzzle = null
       banner = null
       checkpoint = null
@@ -195,7 +203,7 @@ export function createGameFx(width, height) {
     },
     /** Desenha tudo no ctx (já com a escala do jogo). scroll = deslocamento da câmera em unidades do jogo. */
     draw(ctx, scroll) {
-      if (!oneShots.length && !banner && !checkpoint) return
+      if (!oneShots.length && !ambient.length && !banner && !checkpoint) return
       frame.ox = scroll
       clearFrame(frame)
       if (banner) banner.options.x = bannerScale < 1 ? 240 : scroll + width / 2   // a faixa fica no centro da tela, não do mundo
@@ -204,6 +212,7 @@ export function createGameFx(width, height) {
       if (banner && bannerScale === 1) banner.draw(frame, 'back')
       if (checkpoint) checkpoint.draw(frame, 'back')
       for (const fx of oneShots) fx.draw(frame, 'front')
+      for (const fx of ambient) fx.draw(frame, 'front')
       if (banner && bannerScale === 1) banner.draw(frame, 'front')
       if (banner && bannerScale < 1) {
         clearFrame(bannerFrame)

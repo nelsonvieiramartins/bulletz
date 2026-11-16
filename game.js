@@ -119,7 +119,7 @@ const platforms = [
   [4700,224,330], [4800,170,100],
   [5110,196,44], [5225,170,44], [5335,196,44],
   [5420,224,360], [5560,170,110],
-  [6080,224,850]
+  [6080,224,1150]   // vai além do fim da câmera (6980): sem buraco no final
 ]
 // Plataformas móveis: x/y é o início do trajeto, ax/ay é o deslocamento total
 const movers = [
@@ -237,9 +237,14 @@ const heliWaves = [
 const heliHigh = 125, heliLow = 214
 const heliScale = () => width < 480 ? .8 : 1
 const bombs = []   // bombas caindo: { x, y, vx, vy, rot }
+const heliSmoke = []   // fumaça do helicóptero caindo e do destroço: { x, y, vx, vy, r0, r1, age, life }
+const heliWreckScale = .8   // o destroço é desenhado um pouco menor que a arte (que tem o tamanho do helicóptero inteiro, com as pás quebradas abertas)
+let farHeli = null   // o helicóptero que cruza o fundo depois do 1º checkpoint (porta fechada): { delay, sx, y }
 function resetHeli() {
-  boss.heli = { phase: 'idle', t: 0, wave: 0, pending: [], pose: 0, sway: 0, calm: 0, exposedT: 0, vx: 0, tilt: 0, hitUntil: 0, dyingT: 0, nextBlast: 0, gone: false, face: 1, sx: 0, dir: 1, runs: 0, bombT: 0 }
+  boss.heli = { phase: 'idle', t: 0, wave: 0, pending: [], pose: 0, sway: 0, calm: 0, exposedT: 0, vx: 0, tilt: 0, hitUntil: 0, dyingT: 0, nextBlast: 0, gone: false, face: 1, sx: 0, dir: 1, runs: 0, cols: [], smokeT: 0 }
+  farHeli = null
   bombs.length = 0
+  heliSmoke.length = 0
   if (heliBoss) { boss.x = 6680; boss.y = heliHigh }
 }
 resetHeli()
@@ -1258,6 +1263,10 @@ function update(dt) {
   updateMovers()
   if (testConvoy && !finish && !convoy) { finish = true; startConvoy() }
   if (convoy) updateConvoy(dt)
+  if (farHeli) {
+    if ((farHeli.delay -= dt) <= 0) farHeli.sx += 330 * dt   // rápido, da esquerda para a direita
+    if (farHeli.sx > width + 190) farHeli = null
+  }
   if (outSeq) updateStageOut(dt)
   if (onTruck) {
     if (endSeq) updateEnding(dt)
@@ -1322,6 +1331,7 @@ function update(dt) {
       respawnX = checkpoint
       gameFx.checkpoint()
       sfx.play('checkpoint')
+      if (heliBoss && checkpoint === checkpoints[0]) farHeli = { delay: 1.6, sx: -190, y: 74 }   // o helicóptero do Oficial cruza o fundo
     }
   }
   if (zoneIndex < zones.length && player.x >= zones[zoneIndex][0]) {
@@ -1955,13 +1965,20 @@ function startHeliOrder() {
 function startHeliDeath() {
   const h = boss.heli
   bombs.length = 0
+  h.cols = []
   h.face = 1
   h.phase = 'dying'
   h.dyingT = 0
   h.nextBlast = 0
   score += 1500
   enemyShots.length = 0
-  for (const e of enemies) if (e.heli && e.hp > 0) { e.hp = 0; e.fallAge = 0; e.attackAge = -1 }   // quem ele chamou cai junto
+  for (const e of enemies) {   // todos os inimigos por perto fogem para fora da tela
+    if (e.hp <= 0 || e.x < camera - 700 || e.x > camera + width + 700) continue
+    e.fleeing = true
+    e.fleeDir = e.x < camera + width / 2 ? -1 : 1
+    e.attackAge = -1
+    e.special = null
+  }
   sfx.play('bossDown')
 }
 const heliHalfWidth = () => heliMeta.frame[0] / pixelScale / 2 * heliScale() + 20
@@ -1972,11 +1989,11 @@ function updateBombs(dt) {
     b.vy += 520 * dt
     b.x += b.vx * dt
     b.y += b.vy * dt
-    b.vx *= Math.max(0, 1 - dt * .35)
-    b.rot = Math.atan2(b.vy, Math.abs(b.vx) + 60) * .6 * Math.sign(b.vx || 1)
+    b.rot = Math.sin(elapsed * 6 + b.x) * .08   // cai reta, balançando só um pouco
     const hitBody = Math.abs(b.x - player.x) < 11 && b.y >= player.y - 58 * charScale && b.y <= player.y
     if (b.y < groundY - 2 && !hitBody) continue
     bombs.splice(i, 1)
+    if (b.col) b.col.done = true
     const floor = Math.min(b.y, groundY)
     gameFx.bomb({ x: b.x, floor, size: .6 })
     sfx.play('heavyBlast', { dx: b.x - player.x })
@@ -1984,6 +2001,17 @@ function updateBombs(dt) {
   }
 }
 function drawBombs(scroll) {
+  // marcas vermelhas piscando no chão, onde as bombas vão cair
+  const h = boss.heli
+  if (h.cols.length) for (const c of h.cols) {
+    if (c.done) continue
+    ctx.save()
+    ctx.globalAlpha = Math.floor(elapsed * 8) % 2 ? .75 : .3
+    ctx.fillStyle = '#ff3b2e'
+    ctx.beginPath(); ctx.ellipse(Math.round(c.sx), groundY + 2, 24, 3.5, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1; ctx.stroke()
+    ctx.restore()
+  }
   for (const b of bombs) {
     const x = Math.round(b.x - scroll)
     if (x < -20 || x > width + 20) continue
@@ -2001,12 +2029,63 @@ function drawBombs(scroll) {
     ctx.restore()
   }
 }
+function updateFlee(e, dt) {
+  e.face = e.fleeDir
+  if (e.kind === 'drone') {   // os drones vão embora voando, subindo
+    e.x += e.fleeDir * 200 * dt
+    e.y -= 34 * dt
+    e.vx = e.fleeDir * 200
+  } else {
+    e.vx = e.fleeDir * 175
+    e.x += e.vx * dt
+    e.stride += Math.abs(e.vx) * dt
+    e.grounded = true
+    e.moving = true
+  }
+  if (e.x < camera - 90 || e.x > camera + width + 90) e.gone = true
+}
+function spawnHeliSmoke(x, y, { vx = 8, vy = -34, r0 = 5, r1 = 22, life = 1.6 } = {}) {
+  if (heliSmoke.length > 160) heliSmoke.shift()
+  heliSmoke.push({ x, y, vx: vx + (Math.random() - .5) * 12, vy: vy * (.8 + Math.random() * .4), r0, r1, age: 0, life: life * (.8 + Math.random() * .4) })
+}
+function updateHeliSmoke(dt) {
+  for (let i = heliSmoke.length - 1; i >= 0; i--) {
+    const p = heliSmoke[i]
+    p.age += dt
+    if (p.age >= p.life) { heliSmoke.splice(i, 1); continue }
+    p.x += (p.vx + 12 * p.age) * dt   // o vento empurra a coluna para o lado
+    p.y += p.vy * dt
+    p.vy *= Math.max(0, 1 - dt * .5)
+  }
+}
+function drawHeliSmoke(scroll) {
+  ctx.save()
+  for (const p of heliSmoke) {
+    const k = p.age / p.life, r = p.r0 + (p.r1 - p.r0) * Math.min(1, k * 1.3)
+    const shade = Math.round(34 + 70 * k)
+    ctx.globalAlpha = Math.min(.82, (1 - k) * 1.1) * .8
+    ctx.fillStyle = `rgb(${shade},${shade - 4},${shade + 10})`
+    ctx.beginPath()
+    ctx.arc(Math.round(p.x - scroll), Math.round(p.y), Math.round(r), 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
 function heliBlast(x, y, size) {
   droneExplosions.push({ fx: createSpriteFusionExplosion({ x: x*2, y: y*2, ground: y*2, size, seed: Math.round(Math.random()*9000) + 1 }) })
 }
 function updateHeli(dt, bossActive) {
   const h = boss.heli
-  if (h.phase === 'gone') return
+  updateHeliSmoke(dt)
+  for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1)   // quem fugiu da tela some
+  if (h.phase === 'gone') {   // o destroço solta uma coluna de fumaça pelas chamas
+    h.smokeT -= dt
+    if (h.smokeT <= 0 && h.fireSpots) {
+      h.smokeT = .08
+      for (const f of h.fireSpots) spawnHeliSmoke(f.x + (Math.random() - .5) * 14, f.y - 14, { vy: -32, r0: 6, r1: 30, life: 3.4 })
+    }
+    return
+  }
   if (h.phase === 'idle') {
     if (!bossActive) return
     h.phase = 'enter'; h.t = 0
@@ -2054,35 +2133,39 @@ function updateHeli(dt, bossActive) {
     h.tilt += (.08 - h.tilt) * Math.min(1, dt * 6)
     if (h.sx > width + heliHalfWidth() + 60) { h.phase = 'warn'; h.t = 0; announce('BOMBARDEIO!', 1.2); sfx.play('bossShot', { dx: 0 }) }
   } else if (h.phase === 'warn') {
-    boss.x = camera + width + 800   // fora da tela, só o aviso
+    boss.x = camera + width + 800   // fora da tela, só o aviso: as marcas vermelhas no chão mostram onde as bombas vão cair
+    if (!h.cols.length) {
+      const step = width < 480 ? 78 : 92, off = h.runs % 2 ? step / 2 : 0   // sempre as mesmas colunas (deslocadas pela metade a cada passada)
+      for (let x = 42 + off; x < width - 18; x += step) h.cols.push({ sx: x, done: false, dropped: false })
+    }
     if (h.t > 1.0) {   // volta pela esquerda e atravessa a tela
-      h.dir = 1; h.runs++   // sempre da esquerda para a direita, de frente (virado, o texto do casco ficaria espelhado)
-      h.face = h.dir
-      h.sx = h.dir > 0 ? -heliHalfWidth() - 60 : width + heliHalfWidth() + 60
-      h.phase = 'strafe'; h.t = 0; h.bombT = .25
+      h.dir = 1; h.runs++
+      h.face = 1
+      h.sx = -heliHalfWidth() - 60
+      h.phase = 'strafe'; h.t = 0
     }
   } else if (h.phase === 'strafe') {
-    // atravessa a tela toda e solta bombas; elas caem com a velocidade do helicóptero e explodem no chão
-    h.pose = h.dir > 0 ? 5 : 4
+    // atravessa a tela toda soltando uma bomba em cada coluna marcada; as bombas caem retas e explodem no chão, sem mirar no Edu
+    h.pose = 5
     const speed = 330
-    h.sx += h.dir * speed * dt
+    h.sx += speed * dt
     boss.x = camera + h.sx
     boss.y += (heliHigh - 10 - boss.y) * Math.min(1, dt * 3)
-    h.vx = h.dir * speed
+    h.vx = speed
     h.tilt += (.08 - h.tilt) * Math.min(1, dt * 6)
-    const inside = h.sx > 10 && h.sx < width - 10
-    if (inside && (h.bombT -= dt) <= 0) {
-      h.bombT = .3
-      bombs.push({ x: boss.x + 8 * h.dir, y: boss.y - 22, vx: h.dir * speed * .85, vy: 20, rot: 0 })
+    for (const c of h.cols) {
+      if (c.dropped || h.sx < c.sx - 8) continue
+      c.dropped = true
+      bombs.push({ x: camera + c.sx, y: boss.y - 24, vx: 0, vy: 20, rot: 0, col: c })
       sfx.play('patrolShot', { dx: boss.x - player.x })
     }
-    if ((h.dir > 0 && h.sx > width + heliHalfWidth() + 80) || (h.dir < 0 && h.sx < -heliHalfWidth() - 80)) {
+    if (h.sx > width + heliHalfWidth() + 80) {
       h.phase = 'return'; h.t = 0; h.face = 1; h.sx = width + heliHalfWidth() + 60
       boss.x = camera + h.sx
     }
   } else if (h.phase === 'return') {
     h.pose = 0
-    if (h.t > 1.6) { h.phase = 'dive'; h.t = 0 }
+    if (h.t > 1.6) { h.phase = 'dive'; h.t = 0; h.cols = [] }
   } else if (h.phase === 'dive') {
     h.pose = player.x < boss.x ? 4 : 5   // aponta para baixo, para o lado do Edu
     if (boss.y > heliLow - 3) { h.phase = 'exposed'; h.t = 0; h.exposedT = boss.hp > bossHp * .66 ? 4.5 : 5.5 }
@@ -2096,19 +2179,38 @@ function updateHeli(dt, bossActive) {
   } else if (dying) {
     h.dyingT += dt
     h.pose = 6
-    const fall = h.dyingT
-    boss.y += (60 + fall * 170) * dt
-    boss.x += 22 * dt
-    h.tilt += (.5 - h.tilt) * Math.min(1, dt * 2)
-    if ((h.nextBlast -= dt) <= 0 && boss.y < groundY - 8) {
-      h.nextBlast = .22
-      heliBlast(boss.x + (Math.random() - .5) * 90, boss.y - 10 - Math.random() * 40, .8 + Math.random() * .4)
-      sfx.play('droneBlast', { dx: boss.x - player.x })
+    const RISE = .85   // primeiro o helicóptero sobe, engasgando, com faíscas e fumaça; depois despenca
+    if (h.dyingT < RISE) {
+      boss.y -= 85 * (1 - h.dyingT / RISE) * dt
+      h.tilt = Math.sin(h.dyingT * 34) * .045
+      if ((h.nextBlast -= dt) <= 0) {
+        h.nextBlast = .16
+        heliBlast(boss.x + (Math.random() - .5) * 120, boss.y - 20 - Math.random() * 50, .45)
+        sfx.play('droneBlast', { dx: boss.x - player.x })
+      }
+    } else {
+      const fall = h.dyingT - RISE
+      boss.y += (50 + fall * 190) * dt
+      boss.x += 24 * dt
+      h.tilt += (.5 - h.tilt) * Math.min(1, dt * 2)
+      if ((h.nextBlast -= dt) <= 0 && boss.y < groundY - 8) {
+        h.nextBlast = .22
+        heliBlast(boss.x + (Math.random() - .5) * 90, boss.y - 10 - Math.random() * 40, .8 + Math.random() * .4)
+        sfx.play('droneBlast', { dx: boss.x - player.x })
+      }
     }
-    if (boss.y >= groundY) {   // bateu no chão: explosão grande e o helicóptero some
+    // rastro de fumaça escura por todo o tombo
+    for (let n = 0; n < 2; n++) spawnHeliSmoke(boss.x + (Math.random() - .5) * 150, boss.y - 25 - Math.random() * 40, { vy: -22, r0: 7, r1: 26, life: 1.7 })
+    if (boss.y >= groundY && h.dyingT > RISE) {   // bateu no chão: explosão grande e fica o destroço
       boss.y = groundY
       h.phase = 'gone'
       h.gone = true
+      h.wreckX = boss.x
+      // o destruído fica no chão; fogo animado (campfire do pixelfx) em cima das chamas pintadas na arte, mais a fumaça
+      const wm = heliMeta.wreck, hs = heliScale() * heliWreckScale
+      const wl = boss.x - wm.size[0] / pixelScale * hs / 2, wt = groundY + 3 - wm.size[1] / pixelScale * hs
+      h.fireSpots = wm.fires.map(([fx, fy, flame]) => ({ x: wl + fx / pixelScale * hs, y: wt + fy / pixelScale * hs }))
+      for (const [i, [fx, fy, flame]] of wm.fires.entries()) gameFx.fire({ x: h.fireSpots[i].x, y: h.fireSpots[i].y, height: flame * hs * 1.15 })
       heliBlast(boss.x, groundY - 6, 2)
       heliBlast(boss.x - 40, groundY - 4, 1.3)
       heliBlast(boss.x + 40, groundY - 4, 1.3)
@@ -2137,7 +2239,7 @@ function firstShotHit(shot, travel, bossActive) {
   if (bossActive) {
     if (heliBoss) {   // o casco do helicóptero (sem o rotor e a cauda), na escala e no sentido em que está desenhado
       const s = heliScale(), h = boss.heli
-      check(boss, 118*s, boss.y-100*s, boss.y-12*s, boss.x + (heliMeta.frame[0]/2 - heliMeta.anchor[0]) / pixelScale * s * h.face)
+      check(boss, 118*s, boss.y-100*s, boss.y-12*s, boss.x + (heliMeta.frame[0]/2 - heliMeta.anchor[0]) / pixelScale * s)
     }
     else check(boss,36,boss.y-58,boss.y)
   }
@@ -2170,6 +2272,7 @@ function updateCombat(dt) {
       else if (enemy.kind === 'drone') updateDroneFall(enemy,dt)
       continue
     }
+    if (enemy.fleeing) { updateFlee(enemy, dt); continue }
     const distance = player.x - enemy.x
     const config = enemyTypes[enemy.type]
     if (enemy.kind === 'patrol' || enemy.kind === 'melee') {
@@ -2538,17 +2641,23 @@ function drawEnemies(scroll) {
   }
 }
 const heliFlashCanvas = document.createElement('canvas')
-// Quadro do giro (0 = pás nítidas ... 4 = disco): ao entrar o rotor ganha velocidade, em voo alterna os quadros mais rápidos
+// Quadro do giro (0 = pás nítidas ... 4 = disco): o rotor já entra em cena girando, alterna os quadros mais rápidos
 // (o disco e uma pá borrada, para cintilar) e, quando ele cai, o giro vai parando
 const heliSpinCycle = [4, 4, 3, 4, 4, 2]
 function heliSpin(h) {
-  if (h.phase === 'enter') return Math.min(3, Math.floor(h.t / 2.2 * 4))
   if (h.phase === 'dying') return Math.max(0, 4 - Math.floor(h.dyingT * 2.4))
   return heliSpinCycle[Math.floor(elapsed * 20) % heliSpinCycle.length]
 }
 function drawHeli(scroll) {
   const h = boss.heli
-  if (h.phase === 'idle' || h.phase === 'gone') return
+  if (h.phase === 'gone') {
+    const wm = heliMeta.wreck, hs = heliScale() * heliWreckScale
+    const w = wm.size[0] / pixelScale * hs, hgt = wm.size[1] / pixelScale * hs
+    ctx.drawImage(sprites.heliWreck, Math.round(h.wreckX - scroll - w / 2), Math.round(groundY + 3 - hgt), w, hgt)
+    drawHeliSmoke(scroll)
+    return
+  }
+  if (h.phase === 'idle') return
   const [fw, fh] = heliMeta.frame
   const hs = heliScale()
   const half = hs / pixelScale   // as folhas estão em 2x
@@ -2568,28 +2677,57 @@ function drawHeli(scroll) {
   ctx.restore()
   ctx.save()
   ctx.translate(x, y - 60 * hs)   // inclina um pouco para o lado em que voa, em torno do meio do casco
-  ctx.scale(h.face, 1)   // voando para a esquerda, o helicóptero vira
   ctx.rotate(h.tilt)
   ctx.translate(0, 60 * hs)
   const pose = h.pose
   const sx = (pose % heliMeta.cols) * fw, sy = Math.floor(pose / heliMeta.cols) * fh
-  const flash = elapsed < boss.flashUntil
-  if (flash) {
-    heliFlashCanvas.width = fw
-    heliFlashCanvas.height = fh
-    const fctx = heliFlashCanvas.getContext('2d')
-    fctx.drawImage(sprites.heliBody, sx, sy, fw, fh, 0, 0, fw, fh)
-    fctx.globalCompositeOperation = 'source-atop'
-    fctx.fillStyle = 'rgba(255, 34, 46, .6)'
-    fctx.fillRect(0, 0, fw, fh)
-    ctx.drawImage(heliFlashCanvas, 0, 0, fw, fh, -ax * half, -ay * half, fw * half, fh * half)
-  } else ctx.drawImage(sprites.heliBody, sx, sy, fw, fh, -ax * half, -ay * half, fw * half, fh * half)
-  // cauda com a hélice traseira e rotor principal: 5 quadros do giro lento (pás nítidas) ao disco borrado
+  // corpo, cauda e rotor são montados numa imagem só: assim tudo pisca junto quando o helicóptero leva tiro
+  const PAD = 24, cw = fw + PAD * 2, chh = fh + PAD * 2
+  if (heliFlashCanvas.width !== cw) { heliFlashCanvas.width = cw; heliFlashCanvas.height = chh }
+  const cctx = heliFlashCanvas.getContext('2d')
+  cctx.clearRect(0, 0, cw, chh)
   const spin = heliSpin(h)
-  const tail = heliMeta.tails[spin]
-  ctx.drawImage(sprites['heliTail' + (spin + 1)], (tail.x - ax) * half, (tail.y - ay) * half, tail.size[0] * half, tail.size[1] * half)
-  const rotor = heliMeta.rotors[spin]
-  ctx.drawImage(sprites['heliRotor' + (spin + 1)], (rotor.x - ax) * half, (rotor.y - ay) * half, rotor.size[0] * half, rotor.size[1] * half)
+  cctx.drawImage(sprites.heliBody, sx, sy, fw, fh, PAD, PAD, fw, fh)
+  const tail = heliMeta.tails[spin], rotor = heliMeta.rotors[spin]
+  cctx.drawImage(sprites['heliTail' + (spin + 1)], PAD + tail.x, PAD + tail.y)
+  cctx.drawImage(sprites['heliRotor' + (spin + 1)], PAD + rotor.x, PAD + rotor.y)
+  if (elapsed < boss.flashUntil) {
+    cctx.globalCompositeOperation = 'source-atop'
+    cctx.fillStyle = 'rgba(255, 34, 46, .6)'
+    cctx.fillRect(0, 0, cw, chh)
+    cctx.globalCompositeOperation = 'source-over'
+  }
+  ctx.drawImage(heliFlashCanvas, 0, 0, cw, chh, (-ax - PAD) * half, (-ay - PAD) * half, cw * half, chh * half)
+  ctx.restore()
+  drawHeliSmoke(scroll)
+}
+// Helicóptero ao fundo (depois do 1º checkpoint): pequeno, com a porta fechada, atravessa o cenário atrás dos prédios e some
+const heliFarCanvas = document.createElement('canvas')
+function drawFarHeli() {
+  const f = farHeli
+  if (!f || f.delay > 0) return
+  const [fw, fh] = heliMeta.frame
+  const PAD = 24, cw = fw + PAD * 2, chh = fh + PAD * 2
+  if (heliFarCanvas.width !== cw) { heliFarCanvas.width = cw; heliFarCanvas.height = chh }
+  const c = heliFarCanvas.getContext('2d')
+  c.clearRect(0, 0, cw, chh)
+  const pose = heliMeta.poses - 1   // a última pose da folha: porta fechada, sem o Oficial
+  c.drawImage(sprites.heliBody, (pose % heliMeta.cols) * fw, Math.floor(pose / heliMeta.cols) * fh, fw, fh, PAD, PAD, fw, fh)
+  const spin = heliSpinCycle[Math.floor(elapsed * 20) % heliSpinCycle.length]
+  const tail = heliMeta.tails[spin], rotor = heliMeta.rotors[spin]
+  c.drawImage(sprites['heliTail' + (spin + 1)], PAD + tail.x, PAD + tail.y)
+  c.drawImage(sprites['heliRotor' + (spin + 1)], PAD + rotor.x, PAD + rotor.y)
+  c.globalCompositeOperation = 'source-atop'   // véu de distância: roxo, como o ar da cidade
+  c.fillStyle = 'rgba(120, 70, 150, .32)'
+  c.fillRect(0, 0, cw, chh)
+  c.globalCompositeOperation = 'source-over'   // senão, no quadro seguinte nada seria desenhado
+  const s = .34 / pixelScale   // bem menor que o helicóptero do chefe: está longe
+  const [ax, ay] = heliMeta.anchor
+  ctx.save()
+  ctx.globalAlpha = .94
+  ctx.translate(Math.round(f.sx), Math.round(f.y + Math.sin(elapsed * 6) * 1.2))
+  ctx.rotate(.07)   // inclinado para a frente: voa com pressa
+  ctx.drawImage(heliFarCanvas, 0, 0, cw, chh, (-ax - PAD) * s, (-ay - PAD) * s, cw * s, chh * s)
   ctx.restore()
 }
 function drawMover(m,scroll) {
@@ -2847,6 +2985,7 @@ function renderWorld() {
     const shift = Math.round(42 + camera/(end+50-width)*(scaledWidth-width-42))
     ctx.drawImage(sprites.bg,-shift,0,scaledWidth,height)
     drawSmoke(shift)
+    if (heliBoss) drawFarHeli()
   }
   for (const [x,y,w,invisible] of platforms) if (!invisible) terrain(x,y,w,scroll)
   for (const m of movers) drawMover(m,scroll)
@@ -2972,8 +3111,8 @@ Promise.all([
       loadImage('chapolimRun','assets/chapolim/corrida.png'), loadImage('chapolimAttack','assets/chapolim/ataque.png'), loadImage('chapolimFall','assets/chapolim/queda.png'), loadImage('chapolimJump','assets/chapolim/salto.png')] : []),
     ...fase21.wheels.map((wheel, i) => loadImage('wheel' + (i + 1),'assets/fase2/rodas/' + wheel.file))
   ] : [loadImage('bg','assets/cidade.webp'),
-    loadImage('heliBody','assets/boss-heli/corpo.png'),
-    ...[1,2,3,4,5].flatMap(n => [loadImage('heliRotor' + n,'assets/boss-heli/rotor' + n + '.png'), loadImage('heliTail' + n,'assets/boss-heli/cauda' + n + '.png')])]),
+    loadImage('heliBody','assets/boss-heli/corpo.png?v=7'), loadImage('heliWreck','assets/boss-heli/destruido.png?v=2'),
+    ...[1,2,3,4,5].flatMap(n => [loadImage('heliRotor' + n,'assets/boss-heli/rotor' + n + '.png?v=3'), loadImage('heliTail' + n,'assets/boss-heli/cauda' + n + '.png?v=4')])]),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
   loadImage('patrolFall','assets/patrulheiro-ex-queda.png'),
   loadImage('elite','assets/soldado-elite-movimento.png'),
@@ -3014,6 +3153,7 @@ Promise.all([
       get endSeq() { return endSeq },
       get outSeq() { return outSeq },
       get convoy() { return convoy },
+      get farHeli() { return farHeli },
       endStage() { finish = true; outSeq = { t: 0, banner: false, wiped: false } },
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },

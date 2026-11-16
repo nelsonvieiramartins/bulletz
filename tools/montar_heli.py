@@ -57,17 +57,26 @@ arr = np.asarray(body).copy()
 H, W = arr.shape[:2]
 yy, xx = np.mgrid[0:H, 0:W]
 # sem pás, cubo e mastro (os quadros do rotor os substituem) e sem a cauda com a hélice (a cauda animada vem por cima)
-erase = (yy < 258) | ((xx < 790) & (yy < 310)) | ((xx > 1300) & (yy < 310)) | ((xx < 330) & (yy < 700))
+erase = (yy < 258) | ((xx < 790) & (yy < 310)) | ((xx > 1300) & (yy < 310)) | ((xx < 300) & (yy < 700))
 arr[erase] = 0
-# entre as pernas dos esquis (embaixo da barriga) o preto é vão: fica transparente (só o ferro dos esquis, claro, permanece)
-gap = (yy >= 686) & (arr[:, :, :3].max(axis=2) < 34)
-arr[gap] = 0
-# pedaços soltos do esqui de trás, que sobraram picotados depois do recorte, saem (o esqui e as pernas ligados à barriga ficam)
+# esquis: o recorte antigo (com preto entre as pernas) sai e entra o recorte novo, feito à mão (GRAPHIC/Boss Heli/pes_helicoptero.png, mesma escala do corpo)
+arr[(yy >= 684) & (xx >= 620) & (xx <= 1580)] = 0
+arr[(yy >= 662) & (xx >= 1570)] = 0   # o gancho solto embaixo do nariz
+# só o casco principal fica: pecinhas soltas (as caixinhas escuras sob a barriga e sob a cauda, que o recorte deixava picotadas) saem
 lab, nlab = ndimage.label(arr[:, :, 3] > 0)
-for i, sl in enumerate(ndimage.find_objects(lab), 1):
-    if sl[0].start >= 684 and (lab[sl] == i).sum() < 2500:
-        arr[sl][lab[sl] == i] = 0
+sizes = ndimage.sum(arr[:, :, 3] > 0, lab, range(1, nlab + 1))
+arr[lab != 1 + int(np.argmax(sizes))] = 0
+# bordas do casco: suaviza o serrilhado do recorte e devolve um contorno escuro fino em volta (o contorno original saía junto com o fundo)
+solid = arr[:, :, 3] > 0
+solid = ndimage.binary_closing(ndimage.binary_opening(solid, iterations=2), iterations=2)
+edge = ndimage.binary_dilation(solid, iterations=3) & ~solid
+arr[~solid & ~edge] = 0
+arr[edge] = (18, 14, 28, 255)
+arr[solid, 3] = 255
 body = Image.fromarray(arr, 'RGBA')
+FEET = src / 'pes_helicoptero.png'
+FEET_POS = (642, 656)   # canto do recorte dos pés na arte do corpo (alinhado pela ponta esquerda e pela base dos esquis)
+body.alpha_composite(Image.open(FEET).convert('RGBA'), FEET_POS)
 
 # ---- Oficial na porta
 gestos = Image.open(GESTOS).convert('RGB')
@@ -105,6 +114,13 @@ for idx in POSES:
     full.alpha_composite(layer, (ox, oy))
     base.alpha_composite(full)
     frames.append(base.crop((box_x0, box_y0, box_x1, box_y1)).resize((fw, fh), Image.LANCZOS))
+# pose extra (a última do quadro): porta FECHADA, sem o Oficial, para o helicóptero que cruza o fundo da Fase 1 depois do primeiro checkpoint.
+# A porta de correr (com janela) é copiada duas vezes sobre a abertura.
+closed = body.copy()
+panel = body.crop((862, 378, 993, 656))
+closed.alpha_composite(panel, (DOOR[0], 378))
+closed.alpha_composite(panel, (DOOR[0] + 131, 378))
+frames.append(closed.crop((box_x0, box_y0, box_x1, box_y1)).resize((fw, fh), Image.LANCZOS))
 cols = 4
 rows = -(-len(frames) // cols)
 sheet = Image.new('RGBA', (fw * cols, fh * rows), (0, 0, 0, 0))
@@ -156,20 +172,78 @@ TS = 0.92   # a arte da cauda é um pouco maior que a do corpo
 TRUNS = [(41, 394), (428, 786), (822, 1179), (1210, 1579), (1610, 1982)]
 red_t = (tail[:, :, 0] > 190) & (tail[:, :, 1] < 70) & (tail[:, :, 2] < 70) & (tail[:, :, 3] > 40)
 tail_im = Image.fromarray(tail, 'RGBA')
+# as 5 artes da cauda não vêm perfeitamente alinhadas entre si: o farol e o tubo da cauda mudam alguns pixels de um quadro para o outro e
+# a cauda "tremia" no jogo. Cada quadro é alinhado ao primeiro pela parte que não gira (o tubo e a deriva), por correlação.
+left, right = 135, 235                                # recorte relativo ao farol: do fim da hélice até o trecho do tubo da cauda
+tail_f = tail.astype(float)
+tail_f[:, :, :3] *= tail_f[:, :, 3:4] / 255.0         # cor ponderada pela transparência
+def window(bcx, dx, dy):
+    x0_, y0_ = round(bcx - left) + dx, 70 + dy
+    return tail_f[y0_:y0_ + 522, x0_ + 140:x0_ + left + right]   # só a parte da direita (tubo e deriva), longe da hélice
+bc0 = None
+shifts = []
+seams = []
 for n, (x0, x1) in enumerate(TRUNS, 1):
     ty_, tx_ = np.where(red_t[:, x0 - 20:x1 + 20])
     bcx, bcy = tx_.mean() + x0 - 20, ty_.mean()       # farol deste quadro
-    left, right = 135, 235                            # recorte relativo ao farol: do fim da hélice até o trecho do tubo da cauda
-    crop = tail_im.crop((round(bcx - left), 70, round(bcx + right), 592))
+    if bc0 is None:
+        bc0 = bcx; ref = window(bcx, 0, 0); sdx = sdy = 0
+    else:
+        best = None
+        for dy_ in range(-14, 15):
+            for dx_ in range(-14, 15):
+                w_ = window(bcx, dx_, dy_)
+                if w_.shape != ref.shape: continue
+                d_ = float(((w_ - ref) ** 2).mean())
+                if best is None or d_ < best[0]: best = (d_, dx_, dy_)
+        _, sdx, sdy = best
+    shifts.append((sdx, sdy))
+    crop = tail_im.crop((round(bcx - left) + sdx, 70 + sdy, round(bcx + right) + sdx, 592 + sdy))
+    bcy = bcy - sdy   # o farol, já na posição alinhada (o quadro foi deslocado)
     cs = crop.resize((round(crop.width * TS), round(crop.height * TS)), Image.LANCZOS)
+    # emenda: a ponta direita da cauda some aos poucos sobre o tubo do corpo (que continua por baixo daí em diante)
+    arr_t = np.asarray(cs).astype(float)
+    arr_raw = arr_t.copy()
+    ramp = 60
+    fade = np.clip((arr_t.shape[1] - 1 - np.arange(arr_t.shape[1])) / ramp, 0, 1)
+    arr_t[:, :, 3] *= fade[None, :]
+    cs = Image.fromarray(arr_t.astype(np.uint8), 'RGBA')
     bx = BEACON_BODY[0] - left * TS                   # canto do recorte na arte do corpo
     by = BEACON_BODY[1] - (bcy - 70) * TS
+    # a emenda com o corpo: afina a posição (até 8 px) comparando o tubo da cauda com o do corpo na zona onde os dois existem (x 300 a 360)
+    best_seam = None
+    for sy_ in range(-8, 9):
+        for sx_ in range(-8, 9):
+            ox_, oy_ = round(bx) + sx_, round(by) + sy_
+            lx0, lx1 = 300 - ox_, 360 - ox_
+            if lx0 < 0 or lx1 > arr_raw.shape[1] or oy_ < 0 or oy_ + arr_raw.shape[0] > body_rgb.shape[0]: continue
+            ov = arr_raw[:, lx0:lx1, :]
+            bd = body_rgb[oy_:oy_ + arr_raw.shape[0], 300:360, :]
+            ok_ = (ov[:, :, 3] > 200) & (bd.max(axis=2) > 40)
+            if ok_.sum() < 300: continue
+            d_ = float(((ov[:, :, :3][ok_] - bd[ok_]) ** 2).mean())
+            if best_seam is None or d_ < best_seam[0]: best_seam = (d_, sx_, sy_)
+    if best_seam:
+        bx, by = round(bx) + best_seam[1], round(by) + best_seam[2]
+    seams.append(best_seam[1:] if best_seam else None)
     sm = cs.resize((max(1, round(cs.width * scale)), max(1, round(cs.height * scale))), Image.LANCZOS)
     sm.save(out / f'cauda{n}.png', optimize=True)
     meta['tails'].append({'size': list(sm.size), 'x': round((bx - box_x0) * scale), 'y': round((by - box_y0) * scale)})
 
+print('alinhamento da cauda (dx,dy) por quadro:', shifts, ' emenda com o corpo:', seams)
 meta['anchor'] = [round((1060 - box_x0) * scale), fh - round((815 - 780) * scale)]
 meta['door'] = [round((DOOR[0] - box_x0) * scale), round((DOOR[1] - box_y0) * scale), round((DOOR[2] - box_x0) * scale), round((DOOR[3] - box_y0) * scale)]
+# ---- helicóptero destruído no chão (GRAPHIC/Boss Heli/destruido.png): mesma escala do corpo, recortado rente ao desenho
+wreck = Image.open(src / 'destruido.png').convert('RGBA')
+wa = np.asarray(wreck)[:, :, 3]
+wy, wx = np.where(wa > 40)
+wbox = (wx.min(), wy.min(), wx.max() + 1, wy.max() + 1)
+wreck = wreck.crop(wbox)
+wsm = wreck.resize((round(wreck.width * scale), round(wreck.height * scale)), Image.LANCZOS)
+wsm.save(out / 'destruido.png', optimize=True)
+# onde estão as chamas pintadas na arte (base de cada fogo, na arte original) -> o jogo põe fogo e fumaça animados em cima delas
+FIRES = [(1632, 655, 20), (1332, 604, 13)]   # x, y da base e altura das chamas (unidades do jogo)
+meta['wreck'] = {'size': list(wsm.size), 'fires': [[round((fx - wbox[0]) * scale), round((fy - wbox[1]) * scale), fh_] for fx, fy, fh_ in FIRES]}
 (out / 'heli.json').write_text(json.dumps(meta, indent=1))
 print(json.dumps(meta))
 
