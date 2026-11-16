@@ -49,6 +49,9 @@ export function createGameFx(width, height) {
   const bannerHold = 2
   // quadro de trabalho do clarão da ponta da faca (tamanho cheio; origem do efeito em tipOrigin)
   const tipFrame = createFrame(200, 150)
+  // a faixa foi desenhada para a tela de 480 de largura: na tela estreita (celular em pé) é desenhada inteira num quadro à parte e reduzida
+  const bannerFrame = createFrame(480, 270)
+  const bannerScale = Math.min(1, (width / 480) * 1.02)
   const tipOrigin = [100, 100]
 
   return {
@@ -107,14 +110,14 @@ export function createGameFx(width, height) {
     },
     /** Faixa "ESTÁGIO CONCLUÍDO": entra voando, bate, fica (hold s) e sai. Dura 1,45 + hold s. */
     banner({ text = 'ESTÁGIO', label = 'CONCLUÍDO', hold = bannerHold } = {}) {
-      banner = createFx(comboCounter, { x: 240, y: 135, seed: seed(), text, label, hold, light: 1,
+      banner = createFx(comboCounter, { x: width / 2, y: 135, seed: seed(), text, label, hold, light: 1,
         palette: ['#07140f', '#0c3a2a', '#12704a', '#1fb870', '#5df08d', '#b6ffc8', '#e8ffe2', '#ffffff'] })
       bannerTime = 0
       bannerLength = 1.45 + hold
     },
     /** "CHECK POINT" no meio da tela: pilar de luz, as letras caem e brilham (level-up). Dura 3,2 s. */
     checkpoint({ text = 'CHECK POINT' } = {}) {
-      checkpoint = createFx(levelUp, { x: 240, y: 205, seed: seed(), text, titleOnly: true })
+      checkpoint = createFx(levelUp, { x: width / 2, y: 205, seed: seed(), text, titleOnly: true })
       checkpointTime = 0
     },
     get bannerActive() { return !!banner },
@@ -189,13 +192,29 @@ export function createGameFx(width, height) {
       if (!oneShots.length && !banner && !checkpoint) return
       frame.ox = scroll
       clearFrame(frame)
-      if (banner) banner.options.x = scroll + 240   // a faixa fica no centro da tela, não do mundo
-      if (checkpoint) checkpoint.options.x = scroll + 240
+      if (banner) banner.options.x = bannerScale < 1 ? 240 : scroll + width / 2   // a faixa fica no centro da tela, não do mundo
+      if (checkpoint) checkpoint.options.x = scroll + width / 2
       for (const fx of oneShots) fx.draw(frame, 'back')
-      if (banner) banner.draw(frame, 'back')
+      if (banner && bannerScale === 1) banner.draw(frame, 'back')
       if (checkpoint) checkpoint.draw(frame, 'back')
       for (const fx of oneShots) fx.draw(frame, 'front')
-      if (banner) banner.draw(frame, 'front')
+      if (banner && bannerScale === 1) banner.draw(frame, 'front')
+      if (banner && bannerScale < 1) {
+        clearFrame(bannerFrame)
+        banner.draw(bannerFrame, 'back')
+        banner.draw(bannerFrame, 'front')
+        const cx = Math.round(scroll + width / 2), cy = 135
+        for (let dy = -Math.ceil(cy * bannerScale); dy <= Math.ceil((270 - cy) * bannerScale); dy++)
+          for (let dx = -Math.ceil(240 * bannerScale); dx <= Math.ceil(240 * bannerScale); dx++) {
+            const sx = Math.round(240 + dx / bannerScale), sy = Math.round(cy + dy / bannerScale)
+            if (sx < 0 || sy < 0 || sx >= 480 || sy >= 270) continue
+            const px = cx + dx - frame.ox, py = cy + dy
+            if (px < 0 || py < 0 || px >= frame.w || py >= frame.h) continue
+            const c = bannerFrame.color[sy * 480 + sx], l = bannerFrame.light[sy * 480 + sx]
+            if (c) frame.color[py * frame.w + px] = c
+            if (l & 0xffffff) frame.light[py * frame.w + px] = l
+          }
+      }
       if (checkpoint) checkpoint.draw(frame, 'front')
       composite(frame, image.data, null)
       context.putImageData(image, 0, 0)

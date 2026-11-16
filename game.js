@@ -45,7 +45,11 @@ const ctx = game.getContext('2d')
 const sample = preview.getContext('2d')
 // O mundo continua em 480x270; o canvas tem o dobro de pixels para o Edu (sprites de ~133px)
 // aparecer 1:1 em alta definição, enquanto cenário e inimigos são ampliados 2x.
-const width = 480
+// No celular em pé (e só nele) o mundo mostrado é mais estreito (4:3, 360 de largura): a tela fica mais quadrada, o jogo maior e o HUD
+// cabe sem cortar. Ao girar o aparelho a largura troca na hora (applyViewport).
+const portraitQuery = matchMedia('(pointer:coarse) and (orientation:portrait)')
+const wideWidth = 480, squareWidth = 360
+let width = portraitQuery.matches ? squareWidth : wideWidth
 const height = 270
 const pixelScale = 2
 game.width = width * pixelScale
@@ -261,20 +265,38 @@ const powerUpMotes = []
 const powerUpDuration = 2.95
 let powerUpVisual = 0
 const droneExplosions = []
-const gameFx = createGameFx(width, height)   // pixelfx: cano, faísca de acerto, medalha
+let gameFx = createGameFx(width, height)   // pixelfx: cano, faísca de acerto, medalha
 const explosionColorCanvas = document.createElement('canvas')
 const explosionLightCanvas = document.createElement('canvas')
 explosionColorCanvas.width = explosionLightCanvas.width = width
 explosionColorCanvas.height = explosionLightCanvas.height = height
 const explosionColorCtx = explosionColorCanvas.getContext('2d')
 const explosionLightCtx = explosionLightCanvas.getContext('2d')
-const explosionColorImage = explosionColorCtx.createImageData(width,height)
-const explosionLightImage = explosionLightCtx.createImageData(width,height)
-const explosionFrame = {
-  w: width, h: height, ox: 0, oy: 0,
-  color: new Uint32Array(explosionColorImage.data.buffer),
-  light: new Uint32Array(explosionLightImage.data.buffer)
+let explosionColorImage, explosionLightImage, explosionFrame
+function buildExplosionBuffers() {
+  explosionColorCanvas.width = explosionLightCanvas.width = width
+  explosionColorImage = explosionColorCtx.createImageData(width,height)
+  explosionLightImage = explosionLightCtx.createImageData(width,height)
+  explosionFrame = {
+    w: width, h: height, ox: 0, oy: 0,
+    color: new Uint32Array(explosionColorImage.data.buffer),
+    light: new Uint32Array(explosionLightImage.data.buffer)
+  }
 }
+buildExplosionBuffers()
+// Troca a largura do mundo ao girar o celular: refaz o canvas e os buffers de efeitos (a fase continua)
+function applyViewport() {
+  const next = portraitQuery.matches ? squareWidth : wideWidth
+  if (next === width) return
+  width = next
+  game.width = width * pixelScale
+  game.height = height * pixelScale
+  ctx.imageSmoothingEnabled = false
+  buildExplosionBuffers()
+  gameFx = createGameFx(width, height)
+  camera = Math.max(0, player.x - 145)
+}
+portraitQuery.addEventListener('change', applyViewport)
 const impactDuration = .12
 const flashDuration = .075
 const flashSprite = document.createElement('canvas')
@@ -524,7 +546,7 @@ function reset(all = true) {
   enemyShots.length = 0
   Object.assign(player,{x:respawnX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false,mover:null})
   playerLevelY = player.y
-  camera = onTruck ? clamp(player.x - fase21.cameraLead, 0, fase21.cameraMax) : Math.max(0, player.x - 145)
+  camera = onTruck ? clamp(player.x - cameraLeadNow(), 0, cameraMaxNow()) : Math.max(0, player.x - 145)
   shots.length = 0
   impacts.length = 0
   sparks.length = 0
@@ -618,7 +640,7 @@ const ending = {
   sidewalkY: 226,     // chão da calçada do pub, para onde ele desce
   doorX: 563,         // centro da porta principal no desenho do pub (unidades desde a esquerda dele; tools/montar_pub.py)
   pubBase: 201,       // y onde a base do pub (e a calçada dele) encosta: onde começa a calçada da rua padrão
-  doorOnScreen: 440,  // onde a porta fica na tela quando a carreta para (logo à frente do nariz da cabine, com a câmera no fim)
+  doorOnScreen: 440,  // onde a porta fica na tela de 480 de largura quando a carreta para (logo à frente do nariz da cabine, com a câmera no fim); doorScreenX() ajusta para a largura atual
   bannerAt: 2.7,      // s de faixa até a tela começar a fechar
   wipeEnd: 2.75       // s de transição até voltar à tela inicial
 }
@@ -748,6 +770,10 @@ function drawConvoy() {
   }
   for (const p of c.pickups) if (p.hit) drawPickup(p)
 }
+// Medidas da 2.1 pensadas para a tela larga (480), ajustadas à largura atual: a câmera acaba mostrando o mesmo trecho depois da cabine
+const cameraMaxNow = () => fase21.cameraMax + wideWidth - width
+const cameraLeadNow = () => Math.round(fase21.cameraLead * width / wideWidth)
+const doorScreenX = () => ending.doorOnScreen - (wideWidth - width)
 function startEnding() {
   const v0 = roadSpeed
   endSeq = { phase: 'brake', t: 0, v0, dir: 0, free: false, roadEnd: roadPos + v0 * ending.brake / 3, wiped: false }
@@ -789,12 +815,12 @@ function updateEnding(dt) {
 // O pub entra pela direita junto com a rua e, quando a carreta para, a porta fica na frente da cabine.
 // Posição da câmera em que a borda direita do pub encosta na borda direita da tela
 function pubCameraEnd() {
-  return ending.doorOnScreen - ending.doorX + sprites.pub.width / pixelScale + fase21.cameraMax - width
+  return doorScreenX() - ending.doorX + sprites.pub.width / pixelScale + cameraMaxNow() - width
 }
 function drawPub() {
   const img = sprites.pub, w = img.width / pixelScale, h = img.height / pixelScale
-  const doorFinal = ending.doorOnScreen - ending.doorX                     // x do pub com a carreta parada e a câmera no fim
-  const x = Math.round(doorFinal + (endSeq.roadEnd + fase21.cameraMax) - (roadPos + camera))
+  const doorFinal = doorScreenX() - ending.doorX                     // x do pub com a carreta parada e a câmera no fim
+  const x = Math.round(doorFinal + (endSeq.roadEnd + cameraMaxNow()) - (roadPos + camera))
   if (x < width && x + w > 0) ctx.drawImage(img, x, ending.pubBase - h, w, h)
 }
 // Fase 2.1: amortecimento da carreta. Uma mola amortecida segura o corpo da carreta; de tempos em tempos um solavanco
@@ -1368,10 +1394,11 @@ function update(dt) {
   for (const spark of sparks) { spark.y -= dt * 18; spark.t -= dt }
   while (sparks.length && sparks[0].t <= 0) sparks.shift()
   // a câmera segue o Edu pela carreta; no final, depois que ele desce, segue até o fim do desenho do pub (e ele sai de tela)
-  if (onTruck) camera += (clamp(player.x - fase21.cameraLead,0,endSeq && endSeq.free ? pubCameraEnd() : fase21.cameraMax) - camera) * Math.min(1,dt * 6)
+  if (onTruck) camera += (clamp(player.x - cameraLeadNow(),0,endSeq && endSeq.free ? pubCameraEnd() : cameraMaxNow()) - camera) * Math.min(1,dt * 6)
   else if (convoy) {   // a câmera abre a cena à frente do Edu, acompanha a carreta saindo e depois fica parada
     if (convoy.phase !== 'exit' && convoy.phase !== 'done') {
-      const target = convoy.phase === 'ride' ? player.x - 110 : convoy.px - 110
+      const lead = width < wideWidth ? 60 : 110   // na tela estreita o Edu fica mais perto da borda para sobrar rua à frente
+      const target = convoy.phase === 'ride' ? player.x - lead : convoy.px - lead
       camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
     }
   }
