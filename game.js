@@ -449,6 +449,7 @@ if (!devTools) {
   document.querySelector('.title-links')?.remove()
   document.querySelector('.phase-pick')?.remove()
   document.querySelector('#test-end')?.remove()
+  document.querySelector('#test-boss')?.remove()
   document.querySelector('#phone-toggle')?.remove()
   document.querySelector('#menu-phone')?.remove()
   document.querySelector('#dev-panel')?.remove()
@@ -460,6 +461,24 @@ if (!devTools) {
   document.querySelector('#phone-toggle').onclick = (event) => { event.preventDefault(); setPhoneMode(!document.documentElement.classList.contains('modo-celular')) }
   document.querySelector('#dev-phone-off').onclick = () => setPhoneMode(false)
   document.querySelector('#dev-test-end').onclick = () => { if (mode === 'play') document.querySelector('#test-end').click() }   // dispara o final da fase em que o Edu está
+  document.querySelector('#dev-test-boss').onclick = () => { if (mode === 'play') document.querySelector('#test-boss').click() }
+  document.querySelector('#test-boss').onclick = () => { if (onTruck) { announce('A Fase 2.1 não tem boss', 1.6); return } startBossTest(); resumeGame() }
+  // "Fase" + "Ir para" (início, boss, final): vale para a tela inicial e para o painel do modo celular
+  const alvos = { '1': [['', 'Início da fase'], ['boss', 'Boss (vida no fim)']], '2': [['', 'Início da fase'], ['boss', 'Boss (vida no fim)'], ['fim', 'Final da fase → 2.1']], '2.1': [['', 'Início da fase'], ['fim', 'Final da Fase 2.1']] }
+  const faseAtual = onTruck ? '2.1' : String(stage)
+  for (const root of document.querySelectorAll('.title-links, .dev-pick')) {
+    const fase = root.querySelector('.t-fase'), alvo = root.querySelector('.t-alvo')
+    const fill = () => { alvo.replaceChildren(...alvos[fase.value].map(([v, label]) => new Option(label, v))) }
+    fase.value = faseAtual
+    fill()
+    fase.onchange = fill
+    root.querySelector('.t-go').onclick = () => {
+      const params = new URLSearchParams()
+      if (fase.value !== '1') params.set('fase', fase.value)
+      if (alvo.value) params.set(alvo.value, '')
+      location.href = 'index.html' + (params.toString() ? '?' + params.toString().replace(/=(&|$)/g, '$1') : '')
+    }
+  }
 }
 const musicToggle = select('#music-toggle')
 const musicVolume = select('#music-volume')
@@ -753,6 +772,15 @@ function startConvoy() {
     phase: 'lock', t: 0, px, v: c.speed, truckX: px - 830, stopX: px - 110, wheel: 0, hits: 0, jump: false, deck: null, decel: null,
     pickups: c.sheets.map((sheet, i) => ({ sheet, x: px + c.offsets[i], y: c.lanes[i], hit: false, vx: 0, vy: 0, dy: 0, rot: 0, tilt: 0, age: 0 }))
   }
+}
+// Teste de boss (só na versão local): o Edu vai para a arena do chefe e a vida dele fica quase no fim
+function startBossTest() {
+  const x = bossArena + 20
+  respawnX = x
+  reset(false)
+  respawnX = Math.max(...[70, ...checkpoints].filter(c => c <= x))
+  boss.hp = Math.min(boss.hp, 3)
+  bossMeter.value = boss.hp
 }
 function resetConvoy() {
   if (convoy?.deck) { const i = movers.indexOf(convoy.deck); if (i >= 0) movers.splice(i, 1) }
@@ -3298,6 +3326,8 @@ Promise.all([
       window.addEventListener('keydown', back, true)
     }
   }
+  // Teste de boss (?boss): o Edu começa na arena do chefe e a vida dele já está no fim
+  if (new URLSearchParams(location.search).has('boss') && devTools && !onTruck) startBossTest()
   // Abra com ?debug para testar: bulletz.warp(x) teleporta o Edu, bulletz.god = true ignora dano
   if (new URLSearchParams(location.search).has('debug')) {
     const debugParams = new URLSearchParams(location.search)

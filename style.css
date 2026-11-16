@@ -215,3 +215,15 @@ html.modo-celular .dev-panel{display:block;flex:none;width:calc(100 * var(--u));
 @media(prefers-reduced-motion:reduce){#menu-cursor{animation:none}}
 #gameover #menu-cursor{z-index:0}
 .gameover .start-button.art-btn{z-index:1}
+
+/* Menus de teste (só na versão local): seletores de fase e de ponto de teste, com o botão Ir */
+.title-links label{display:flex;align-items:center;gap:.6em;font:700 clamp(10px,1.3cqw,15px) var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#d9c3e4}
+.title-links select,.dev-pick select{font:700 clamp(10px,1.3cqw,14px) var(--mono);color:#ffd9a0;background:#1b0f2acc;border:1px solid #ffb35a88;padding:.5em .7em;max-width:100%}
+.title-links button,.dev-pick button{font:700 clamp(10px,1.3cqw,15px) var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#1a0a10;background:#ffb35a;border:1px solid #ffe7a6;padding:.55em 1.4em;cursor:pointer}
+.title-links button:hover,.dev-pick button:hover{background:#ffd18a}
+.dev-pick{display:grid;grid-template-columns:1fr 1fr auto;gap:6px}
+.dev-pick select{min-height:34px;font-size:11px}
+.dev-pick button{min-height:34px;font-size:11px;padding:6px 14px}
+.dev-grid.two{grid-template-columns:repeat(2,1fr)}
+html.modo-celular .dev-pick{grid-template-columns:1fr auto}
+html.modo-celular .dev-pick .t-fase{grid-column:1 / -1}

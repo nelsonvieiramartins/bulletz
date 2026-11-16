@@ -13,8 +13,8 @@
 <title>BULLETZ — Divorced Dad Rock</title>
 <script>try{if(localStorage.getItem('bulletz.modoCelular')==='1'&&['localhost','127.0.0.1','[::1]'].indexOf(location.hostname)>=0)document.documentElement.classList.add('modo-celular')}catch(e){}</script>
 <script>try{if(sessionStorage.getItem('bulletz.autostart'))document.documentElement.classList.add('stage-loading');setTimeout(function(){document.documentElement.classList.remove('stage-loading')},10000)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=41">
-<script type="module" src="game.js?v=187"></script>
+<link rel="stylesheet" href="style.css?v=42">
+<script type="module" src="game.js?v=188"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -55,13 +55,11 @@
       <img class="title-logo" src="assets/logo-bulletz.png" alt="BULLETZ — Divorced Dad Rock">
       <button id="start" type="button" class="start-button art-btn art-iniciar">INICIAR JOGO</button>
       <nav class="title-links" aria-label="Ferramentas de teste">
+        <label>Fase <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select></label>
+        <label>Ir para <select class="t-alvo" aria-label="Ponto de teste"></select></label>
+        <button type="button" class="t-go">Ir</button>
         <a href="efeitos.html">Teste FX</a>
         <a href="sprites.html">Sprites</a>
-        <a href="index.html">Fase 1</a>
-        <a href="index.html?fase=2">Fase 2</a>
-        <a href="index.html?fase=2&fim">Final 2</a>
-        <a href="index.html?fase=2.1">Fase 2.1</a>
-        <a href="index.html?fase=2.1&fim">Final 2.1</a>
         <a href="#" id="phone-toggle" role="button">Modo celular</a>
       </nav>
       <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
@@ -90,6 +88,7 @@
           <button id="reset" type="button">Reiniciar fase <span aria-hidden="true">↻</span></button>
           <button id="fullscreen-toggle" type="button">Tela cheia</button>
           <label class="phase-pick">Fase <select id="phase-select" aria-label="Escolher a fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · Em cima da Carreta Furação</option></select></label>
+          <button id="test-boss" type="button">Teste: boss (vida no fim)</button>
           <button id="test-end" type="button">Teste: final da fase</button>
           <button id="menu-phone" type="button">Modo celular: desligado</button>
           <button id="exit-menu" type="button">SAIR</button>
@@ -203,19 +202,18 @@
       </div>
     </section>
     <section>
-      <h2>Fases</h2>
-      <div class="dev-grid">
-        <a href="index.html">Fase 1</a>
-        <a href="index.html?fase=2">Fase 2</a>
-        <a href="index.html?fase=2.1">Fase 2.1</a>
+      <h2>Ir para</h2>
+      <div class="dev-pick">
+        <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select>
+        <select class="t-alvo" aria-label="Ponto de teste"></select>
+        <button type="button" class="t-go">Ir</button>
       </div>
     </section>
     <section>
-      <h2>Finais de fase</h2>
-      <div class="dev-grid">
-        <a href="index.html?fase=2&fim">Final 2</a>
-        <a href="index.html?fase=2.1&fim">Final 2.1</a>
-        <button type="button" id="dev-test-end">Final da fase atual</button>
+      <h2>Na fase atual</h2>
+      <div class="dev-grid two">
+        <button type="button" id="dev-test-boss">Boss (vida no fim)</button>
+        <button type="button" id="dev-test-end">Final da fase</button>
       </div>
     </section>
   </aside>
