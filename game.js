@@ -369,7 +369,7 @@ const devTools = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 if (!devTools) {
   document.querySelector('.title-links')?.remove()
   document.querySelector('.phase-pick')?.remove()
-  document.querySelector('#test-end2')?.remove()
+  document.querySelector('#test-end')?.remove()
 }
 const musicToggle = select('#music-toggle')
 const musicVolume = select('#music-volume')
@@ -873,7 +873,19 @@ function showFullscreenState() {
 
 select('#start').onclick = startGame
 // Botão de teste do menu: abre a Fase 2 direto na cena final (caminhonetes, carreta, ESTÁGIO CONCLUÍDO) e segue para a 2.1, sem sair da tela cheia
-if (select('#test-end2')) select('#test-end2').onclick = () => goToStage('2', { extra: { fim: '1' } })
+// Botão de teste do menu: dispara o final da fase em que o Edu está (1 → 2, 2 → 2.1 ou o final da 2.1), no ponto onde ele está
+if (select('#test-end')) {
+  const testEnd = select('#test-end')
+  testEnd.textContent = onTruck ? 'Teste: final da Fase 2.1' : stage === 2 ? 'Teste: final da Fase 2 → 2.1' : 'Teste: final da Fase 1 → 2'
+  testEnd.onclick = () => {
+    if (finish || convoy || endSeq || outSeq || lives === 0) return
+    resumeGame()
+    finish = true
+    if (onTruck) startEnding()
+    else if (stage === 2) startConvoy()
+    else outSeq = { t: 0, banner: false, wiped: false, pause: .3 }
+  }
+}
 // iPhone/iPod: o Safari não tem API de tela cheia; só abrindo pelo ícone da Tela de Início (modo app) o jogo ocupa a tela toda
 {
   const iphone = /iPhone|iPod/.test(navigator.userAgent)
