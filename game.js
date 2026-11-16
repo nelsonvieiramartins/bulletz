@@ -2,7 +2,7 @@ import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js'
 import { createGameFx } from './gamefx.js?v=2'
 import { applySpriteConfig } from './spriteconfig.js'
-import { fase2 } from './fase2.js'
+import { fase2 } from './fase2.js?v=2'
 import { fase21 } from './fase21.js'
 import { createMidiPlayer } from './midiplayer.js'
 
@@ -131,6 +131,10 @@ const movers = [
 ]
 const checkpoints = [1150, 3300, 5500]
 const goal = 6870
+// Fase 2: depois que o chefe cai o Edu ainda anda um bom trecho (a rua continua) antes de as caminhonetes fecharem a pista e a Carreta chegar
+const convoyWalk = stage === 2 && !onTruck ? 330 : 0
+const finishX = goal + convoyWalk   // onde o final da fase dispara
+const walkEnd = end + convoyWalk     // até onde o Edu e a câmera vão
 const bossArena = 6460
 const zones = [
   [2116, 'SETOR 2 · VIADUTOS DA PENSÃO'],
@@ -1346,7 +1350,7 @@ function update(dt) {
     player.y = player.mover.cy
   }
   const oldY = player.y
-  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],endSeq && endSeq.free ? Infinity : fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,convoyActive ? Infinity : end)
+  player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],endSeq && endSeq.free ? Infinity : fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,convoyActive ? Infinity : walkEnd)
   player.vy += 790 * dt
   player.y += player.vy * dt
   player.grounded = false
@@ -1403,7 +1407,7 @@ function update(dt) {
     announce('POWER UP!',1.4)
     sfx.play('powerUp')
   }
-  if (player.x >= goal && boss.hp === 0 && (!heliBoss || boss.heli.gone) && !finish && player.grounded) {
+  if (player.x >= finishX && boss.hp === 0 && (!heliBoss || boss.heli.gone) && !finish && player.grounded) {
     finish = true
     if (stage === 2 && !onTruck) startConvoy()   // Fase 2: três caminhonetes fecham a rua e a Carreta Furação abre caminho
     else outSeq = { t: 0, banner: false, wiped: false }
@@ -1474,7 +1478,7 @@ function update(dt) {
       camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
     }
   }
-  else camera += (clamp(player.x - walkLead(),0,end+50-width) - camera) * Math.min(1,dt * 6)
+  else camera += (clamp(player.x - walkLead(),0,walkEnd+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
   if (!onTruck && nextProgress !== progress) {
     progress = nextProgress
