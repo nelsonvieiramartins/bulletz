@@ -236,6 +236,9 @@ const heliWaves = [
 // O helicóptero é desenhado em 340 de largura (2x); na tela estreita do celular em pé encolhe para caber (heliScale).
 const heliHigh = 125, heliLow = 214
 const heliScale = () => width < 480 ? .8 : 1
+// Alcance do tiro do Edu: .75 s a 430/s (uns 320 unidades) na tela larga. Na tela estreita do celular em pé (300 de largura, ele fica no meio)
+// o tiro iria muito além da borda e mataria os inimigos antes de entrarem na tela: lá o alcance é de ~150 unidades (contando o cano), até a borda da tela.
+const shotLife = () => width < 480 ? .3 : .75
 const bombs = []   // bombas caindo: { x, y, vx, vy, rot }
 const heliSmoke = []   // fumaça do helicóptero caindo e do destroço: { x, y, vx, vy, r0, r1, age, life }
 const heliWreckScale = .8   // o destroço é desenhado um pouco menor que a arte (que tem o tamanho do helicóptero inteiro, com as pás quebradas abertas)
@@ -1389,7 +1392,7 @@ function update(dt) {
     if (shotTick++ % bulletEvery === 0) {
       const [muzzleX,muzzleY] = playerPose().muzzle
       // a bala nasce na ponta que se vê da arma (o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano)
-      shots.push({x:player.x + player.face * muzzleX * heroVisualScale,y:player.y + muzzleY * heroVisualScale + (Math.random()*2-1)*fireSpread,dx:player.face,t:.75})
+      shots.push({x:player.x + player.face * muzzleX * heroVisualScale,y:player.y + muzzleY * heroVisualScale + (Math.random()*2-1)*fireSpread,dx:player.face,t:shotLife()})
     }
     playShotSound()
   }
@@ -3189,6 +3192,7 @@ Promise.all([
       get convoy() { return convoy },
       get farHeli() { return farHeli },
       get heliWaveCount() { return heliWaves.length },
+      shots,
       endStage() { finish = true; outSeq = { t: 0, banner: false, wiped: false } },
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },
