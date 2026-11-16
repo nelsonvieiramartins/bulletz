@@ -220,8 +220,29 @@ const maxLives = 3
 let lives = maxLives
 let score = 0
 let invulnerability = 0
-const bossHp = 24
+// Fase 1: o chefe é o Oficial de Justiça no helicóptero (assets/boss-heli, montado por tools/montar_heli.py). Fase 2: O Cobrador a pé.
+const heliBoss = stage === 1
+const heliMeta = heliBoss ? await (await fetch('assets/boss-heli/heli.json')).json() : null
+const bossHp = heliBoss ? 30 : 24
 const boss = { x: 6680, y: groundY, hp: bossHp, delay: .75, volley: 0 }
+// Ondas que o Oficial chama (esquerda e direita); depois da última a última se repete
+const heliWaves = [
+  { left: ['patrol', 'patrol'], right: ['patrol', 'patrol'] },
+  { left: ['patrol', 'elite'], right: ['patrol', 'patrol', 'patrol'] },
+  { left: ['elite', 'patrol', 'patrol'], right: ['elite', 'patrol'] },
+  { left: ['elite', 'elite', 'patrol'], right: ['elite', 'elite', 'patrol'] }
+]
+// Altura dos esquis: lá em cima (o casco fica acima do alcance até dos tiros dados em salto) e baixo (exposto, na altura dos tiros do Edu).
+// O helicóptero é desenhado em 340 de largura (2x); na tela estreita do celular em pé encolhe para caber (heliScale).
+const heliHigh = 125, heliLow = 214
+const heliScale = () => width < 480 ? .8 : 1
+const bombs = []   // bombas caindo: { x, y, vx, vy, rot }
+function resetHeli() {
+  boss.heli = { phase: 'idle', t: 0, wave: 0, pending: [], pose: 0, sway: 0, calm: 0, exposedT: 0, vx: 0, tilt: 0, hitUntil: 0, dyingT: 0, nextBlast: 0, gone: false, face: 1, sx: 0, dir: 1, runs: 0, bombT: 0 }
+  bombs.length = 0
+  if (heliBoss) { boss.x = 6680; boss.y = heliHigh }
+}
+resetHeli()
 
 function createEnemy({ x, type, min, max, y }) {
   const drone = type === 'drone' || type === 'heavyDrone'
@@ -244,6 +265,7 @@ function populateEnemies(at) {
   boss.hp = bossHp
   boss.delay = .75
   boss.volley = 0
+  resetHeli()
 }
 populateEnemies(70)
 const keys = new Set()
@@ -333,6 +355,13 @@ const lifeMedals = [...livesText.querySelectorAll('img')]
 const playerHud = select('#player-hud')
 const bossMeter = select('#boss-health')
 const bossHud = select('#boss-hud')
+if (heliBoss) {   // no lugar do Cobrador: nome e vida do Oficial
+  bossHud.firstChild.textContent = 'OFICIAL DE JUSTIÇA '
+  bossHud.classList.add('heli')   // a barra fica no alto, acima do rotor
+  bossMeter.max = bossHp
+  bossMeter.value = bossHp
+  bossMeter.setAttribute('aria-label', 'Vida do Oficial de Justiça')
+}
 const scoreDisplay = select('#hud-score')
 const scoreCtx = scoreDisplay.getContext('2d')
 const scoreDigits = [
@@ -1333,7 +1362,7 @@ function update(dt) {
     announce('POWER UP!',1.4)
     sfx.play('powerUp')
   }
-  if (player.x >= goal && boss.hp === 0 && !finish && player.grounded) {
+  if (player.x >= goal && boss.hp === 0 && (!heliBoss || boss.heli.gone) && !finish && player.grounded) {
     finish = true
     if (stage === 2 && !onTruck) startConvoy()   // Fase 2: três caminhonetes fecham a rua e a Carreta Furação abre caminho
     else outSeq = { t: 0, banner: false, wiped: false }
@@ -1897,12 +1926,204 @@ function updateDroneFall(enemy, dt) {
   }
 }
 
+// ---- Oficial de Justiça no helicóptero (chefe da Fase 1)
+// Voa por cima da arena e comanda ondas de soldados e elites pela esquerda e pela direita. Enquanto houver soldados ele fica lá em cima, fora
+// do alcance dos tiros; quando a onda acaba ele desce com a porta aberta (exposto) por alguns segundos, depois sobe e chama a próxima.
+// poses do Oficial (folha corpo.png): 0 parado, 1 mão aberta, 2 aponta p/ esquerda, 3 aponta p/ direita, 4 e 8 apontam p/ baixo e à esquerda,
+// 5 e 9 apontam p/ baixo e à direita, 6 chama/grita, 7 reação ao tiro
+function spawnHeliEnemy(type, side) {
+  const x = side === 'left' ? camera - 45 : camera + width + 45
+  const enemy = createEnemy({ x, type, min: player.x - 300, max: player.x + 300, y: groundY })
+  enemy.face = side === 'left' ? 1 : -1
+  enemy.route = enemy.face
+  enemy.delay = 1.2 + Math.random() * .7
+  enemy.heli = true
+  enemies.push(enemy)
+}
+function startHeliOrder() {
+  const h = boss.heli
+  const wave = heliWaves[Math.min(h.wave, heliWaves.length - 1)]
+  h.wave++
+  h.phase = 'order'
+  h.t = 0
+  h.pending = [
+    ...wave.left.map((type, i) => ({ at: .6 + i * .9, side: 'left', type })),
+    ...wave.right.map((type, i) => ({ at: 2.1 + i * .9, side: 'right', type }))
+  ].sort((a, b) => a.at - b.at)
+  sfx.play('bossShot', { dx: 0 })
+}
+function startHeliDeath() {
+  const h = boss.heli
+  bombs.length = 0
+  h.face = 1
+  h.phase = 'dying'
+  h.dyingT = 0
+  h.nextBlast = 0
+  score += 1500
+  enemyShots.length = 0
+  for (const e of enemies) if (e.heli && e.hp > 0) { e.hp = 0; e.fallAge = 0; e.attackAge = -1 }   // quem ele chamou cai junto
+  sfx.play('bossDown')
+}
+const heliHalfWidth = () => heliMeta.frame[0] / pixelScale / 2 * heliScale() + 20
+// Bombas do bombardeio: caem da barriga, explodem no chão (ou no Edu) com a explosão do pixelfx; quem está no chão por perto perde uma vida
+function updateBombs(dt) {
+  for (let i = bombs.length - 1; i >= 0; i--) {
+    const b = bombs[i]
+    b.vy += 520 * dt
+    b.x += b.vx * dt
+    b.y += b.vy * dt
+    b.vx *= Math.max(0, 1 - dt * .35)
+    b.rot = Math.atan2(b.vy, Math.abs(b.vx) + 60) * .6 * Math.sign(b.vx || 1)
+    const hitBody = Math.abs(b.x - player.x) < 11 && b.y >= player.y - 58 * charScale && b.y <= player.y
+    if (b.y < groundY - 2 && !hitBody) continue
+    bombs.splice(i, 1)
+    const floor = Math.min(b.y, groundY)
+    gameFx.bomb({ x: b.x, floor, size: .6 })
+    sfx.play('heavyBlast', { dx: b.x - player.x })
+    if (!finish && (hitBody || (Math.abs(player.x - b.x) < 30 && player.y > groundY - 22))) hitPlayer()
+  }
+}
+function drawBombs(scroll) {
+  for (const b of bombs) {
+    const x = Math.round(b.x - scroll)
+    if (x < -20 || x > width + 20) continue
+    ctx.save()
+    ctx.translate(x, Math.round(b.y))
+    ctx.rotate(b.rot)
+    ctx.fillStyle = '#15121c'      // casco escuro com um brilho e as aletas
+    ctx.beginPath(); ctx.ellipse(0, 0, 5, 7.5, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#4b4560'
+    ctx.beginPath(); ctx.ellipse(-1.6, -1.8, 1.8, 3.2, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#2b2736'
+    ctx.fillRect(-6, -10, 3, 5); ctx.fillRect(3, -10, 3, 5); ctx.fillRect(-3, -11, 6, 3)
+    ctx.fillStyle = Math.floor(elapsed * 14) % 2 ? '#ff4a3a' : '#ffd24a'   // luz piscando
+    ctx.fillRect(-1, -13, 2, 2)
+    ctx.restore()
+  }
+}
+function heliBlast(x, y, size) {
+  droneExplosions.push({ fx: createSpriteFusionExplosion({ x: x*2, y: y*2, ground: y*2, size, seed: Math.round(Math.random()*9000) + 1 }) })
+}
+function updateHeli(dt, bossActive) {
+  const h = boss.heli
+  if (h.phase === 'gone') return
+  if (h.phase === 'idle') {
+    if (!bossActive) return
+    h.phase = 'enter'; h.t = 0
+    boss.x = camera + width + 140
+    boss.y = -40
+    announce('OFICIAL DE JUSTIÇA', 2)
+    sfx.play('bossShot', { dx: 0 })
+  }
+  h.t += dt
+  h.sway += dt
+  const dying = h.phase === 'dying'
+  const flyby = h.phase === 'leave' || h.phase === 'warn' || h.phase === 'strafe'
+  if (!dying) {
+    player.x = clamp(player.x, bossArena - 20, bossArena + 430)   // a arena: ele não deixa o Edu passar nem voltar
+    for (const e of enemies) if (e.heli && e.hp > 0) { e.min = player.x - 300; e.max = player.x + 300 }   // os chamados correm até o Edu
+    if (flyby) { /* o voo lateral controla a posição abaixo */ } else {
+    const exposed = h.phase === 'dive' || h.phase === 'exposed'
+    const oldX = boss.x
+    const tx = camera + width * .5 + 30 + Math.sin(h.sway * .9) * (exposed ? 16 : 42)
+    const ty = exposed ? heliLow : heliHigh
+    boss.x += (tx - boss.x) * Math.min(1, dt * (h.phase === 'enter' ? 1.4 : 2.2))
+    boss.y += (ty - boss.y) * Math.min(1, dt * (h.phase === 'enter' ? 1.6 : 2.4))
+    h.vx = (boss.x - oldX) / Math.max(dt, 1e-3)
+    h.tilt += (Math.max(-1, Math.min(1, h.vx / 120)) * .08 - h.tilt) * Math.min(1, dt * 6)
+    }
+  }
+  if (h.phase === 'enter') {
+    h.pose = 0
+    if (h.t > 2.2) startHeliOrder()
+  } else if (h.phase === 'order') {
+    h.pose = h.t < 1.6 ? 2 : 3   // aponta para a esquerda e depois para a direita, de onde vêm os soldados
+    while (h.pending.length && h.pending[0].at <= h.t) { const s = h.pending.shift(); spawnHeliEnemy(s.type, s.side) }
+    if (!h.pending.length && h.t > 3.6) { h.phase = 'wave'; h.t = 0; h.calm = 0 }
+  } else if (h.phase === 'wave') {
+    h.pose = Math.floor(h.t / .9) % 3 === 1 ? 6 : 0   // fica sobrevoando, chamando
+    if (enemies.some(e => e.heli && e.hp > 0)) h.calm = 0
+    else if ((h.calm += dt) > 1.1) { h.phase = 'leave'; h.t = 0; h.sx = boss.x - camera }   // onda eliminada: ele sai da tela e vem bombardear
+  } else if (h.phase === 'leave') {
+    // sai da tela voando para a direita, subindo
+    h.pose = 6
+    h.sx += 520 * dt
+    boss.x = camera + h.sx
+    boss.y += (heliHigh - 25 - boss.y) * Math.min(1, dt * 2)
+    h.vx = 520
+    h.tilt += (.08 - h.tilt) * Math.min(1, dt * 6)
+    if (h.sx > width + heliHalfWidth() + 60) { h.phase = 'warn'; h.t = 0; announce('BOMBARDEIO!', 1.2); sfx.play('bossShot', { dx: 0 }) }
+  } else if (h.phase === 'warn') {
+    boss.x = camera + width + 800   // fora da tela, só o aviso
+    if (h.t > 1.0) {   // volta pela esquerda e atravessa a tela
+      h.dir = 1; h.runs++   // sempre da esquerda para a direita, de frente (virado, o texto do casco ficaria espelhado)
+      h.face = h.dir
+      h.sx = h.dir > 0 ? -heliHalfWidth() - 60 : width + heliHalfWidth() + 60
+      h.phase = 'strafe'; h.t = 0; h.bombT = .25
+    }
+  } else if (h.phase === 'strafe') {
+    // atravessa a tela toda e solta bombas; elas caem com a velocidade do helicóptero e explodem no chão
+    h.pose = h.dir > 0 ? 5 : 4
+    const speed = 330
+    h.sx += h.dir * speed * dt
+    boss.x = camera + h.sx
+    boss.y += (heliHigh - 10 - boss.y) * Math.min(1, dt * 3)
+    h.vx = h.dir * speed
+    h.tilt += (.08 - h.tilt) * Math.min(1, dt * 6)
+    const inside = h.sx > 10 && h.sx < width - 10
+    if (inside && (h.bombT -= dt) <= 0) {
+      h.bombT = .3
+      bombs.push({ x: boss.x + 8 * h.dir, y: boss.y - 22, vx: h.dir * speed * .85, vy: 20, rot: 0 })
+      sfx.play('patrolShot', { dx: boss.x - player.x })
+    }
+    if ((h.dir > 0 && h.sx > width + heliHalfWidth() + 80) || (h.dir < 0 && h.sx < -heliHalfWidth() - 80)) {
+      h.phase = 'return'; h.t = 0; h.face = 1; h.sx = width + heliHalfWidth() + 60
+      boss.x = camera + h.sx
+    }
+  } else if (h.phase === 'return') {
+    h.pose = 0
+    if (h.t > 1.6) { h.phase = 'dive'; h.t = 0 }
+  } else if (h.phase === 'dive') {
+    h.pose = player.x < boss.x ? 4 : 5   // aponta para baixo, para o lado do Edu
+    if (boss.y > heliLow - 3) { h.phase = 'exposed'; h.t = 0; h.exposedT = boss.hp > bossHp * .66 ? 4.5 : 5.5 }
+  } else if (h.phase === 'exposed') {
+    const alt = Math.floor(h.t / .45) % 2   // alterna as duas variações do gesto, sempre apontando para o lado do Edu
+    h.pose = elapsed < h.hitUntil ? 7 : player.x < boss.x ? (alt ? 8 : 4) : (alt ? 9 : 5)
+    if (h.t > h.exposedT) { h.phase = 'rise'; h.t = 0 }
+  } else if (h.phase === 'rise') {
+    h.pose = 1
+    if (boss.y < heliHigh + 4) startHeliOrder()
+  } else if (dying) {
+    h.dyingT += dt
+    h.pose = 6
+    const fall = h.dyingT
+    boss.y += (60 + fall * 170) * dt
+    boss.x += 22 * dt
+    h.tilt += (.5 - h.tilt) * Math.min(1, dt * 2)
+    if ((h.nextBlast -= dt) <= 0 && boss.y < groundY - 8) {
+      h.nextBlast = .22
+      heliBlast(boss.x + (Math.random() - .5) * 90, boss.y - 10 - Math.random() * 40, .8 + Math.random() * .4)
+      sfx.play('droneBlast', { dx: boss.x - player.x })
+    }
+    if (boss.y >= groundY) {   // bateu no chão: explosão grande e o helicóptero some
+      boss.y = groundY
+      h.phase = 'gone'
+      h.gone = true
+      heliBlast(boss.x, groundY - 6, 2)
+      heliBlast(boss.x - 40, groundY - 4, 1.3)
+      heliBlast(boss.x + 40, groundY - 4, 1.3)
+      sfx.play('bossDown')
+      announce('O OFICIAL CAIU · AVANCE', 2.5)
+    }
+  }
+}
+
 function firstShotHit(shot, travel, bossActive) {
   let hit
   let nearest = travel
-  function check(target, halfWidth, top, bottom) {
+  function check(target, halfWidth, top, bottom, cx = target.x) {
     if (target.hp <= 0 || shot.y < top || shot.y > bottom) return
-    const ahead = (target.x-shot.x)*shot.dx
+    const ahead = (cx-shot.x)*shot.dx
     if (ahead + halfWidth < 0) return
     const distance = Math.max(0,ahead-halfWidth)
     if (distance > nearest || (hit && distance === nearest)) return
@@ -1913,7 +2134,13 @@ function firstShotHit(shot, travel, bossActive) {
     if (enemy.kind === 'drone') check(enemy,18*charScale,enemy.y-14*charScale,enemy.y+14*charScale)
     else check(enemy,12*charScale,enemy.y-66*charScale,enemy.y)
   }
-  if (bossActive) check(boss,36,boss.y-58,boss.y)
+  if (bossActive) {
+    if (heliBoss) {   // o casco do helicóptero (sem o rotor e a cauda), na escala e no sentido em que está desenhado
+      const s = heliScale(), h = boss.heli
+      check(boss, 118*s, boss.y-100*s, boss.y-12*s, boss.x + (heliMeta.frame[0]/2 - heliMeta.anchor[0]) / pixelScale * s * h.face)
+    }
+    else check(boss,36,boss.y-58,boss.y)
+  }
   return hit
 }
 
@@ -1921,7 +2148,8 @@ function updateCombat(dt) {
   invulnerability -= dt
   while (impacts.length && elapsed-impacts[0].at >= impactDuration) impacts.shift()
   const bossActive = player.x > bossArena && boss.hp > 0 && !finish
-  if (bossActive && (boss.delay -= dt) <= 0) {
+  if (heliBoss) { updateHeli(dt, bossActive); updateBombs(dt) }
+  else if (bossActive && (boss.delay -= dt) <= 0) {
     const low = boss.volley++ % 2 === 1
     boss.delay = boss.hp <= bossHp/2 ? .82 : 1.25
     const [x,y] = bossMuzzles[low ? 2 : 1]
@@ -1932,7 +2160,7 @@ function updateCombat(dt) {
       enemyShots.push({x:boss.x+ox,y:boss.y+oy,vx:-118})
     }
   }
-  if (boss.hp > 0 && player.x > boss.x-40) player.x = boss.x-40
+  if (!heliBoss && boss.hp > 0 && player.x > boss.x-40) player.x = boss.x-40
   const playerTop = player.y - (player.crouch > .6 ? 40 : 58) * charScale
   for (const enemy of enemies) {
     enemy.hitKick = (enemy.hitKick || 0) * Math.max(0,1-dt*15)
@@ -2013,12 +2241,14 @@ function updateCombat(dt) {
       sfx.play('hitEnemy', { dx: x - player.x })
       gameFx.hit({ x, y: shot.y, floor: target.y, dx: shot.dx })
       target.flashUntil = elapsed + (target.kind === 'drone' ? .12 : flashDuration)
+      if (target === boss && heliBoss) boss.heli.hitUntil = elapsed + .3
       if (target !== boss) {
         target.hitKick = shot.dx*6
         target.hitKickY = -2.5
       }
       if (--target.hp === 0) {
-        if (target === boss) {
+        if (target === boss && heliBoss) startHeliDeath()
+        else if (target === boss) {
           score += 1500
           enemyShots.length = 0
           announce('O COBRADOR CAIU · AVANCE',2.5)
@@ -2294,6 +2524,7 @@ function drawEnemies(scroll) {
     const sheet = enemy.type === 'elite' ? 'elite' : enemy.type === 'heavyDrone' ? 'heavyDrone' : enemy.kind
     enemyFrame(sheet, frame, x, y, enemy.face, elapsed < enemy.flashUntil)
   }
+  if (heliBoss) { drawBombs(scroll); drawHeli(scroll); return }
   const x = boss.x-scroll
   if (boss.hp <= 0 || x < -90 || x > width+90) return
   const warning = player.x > bossArena && boss.delay <= .36
@@ -2305,6 +2536,61 @@ function drawEnemies(scroll) {
     const [mx,my] = bossMuzzles[frame]
     fill(ctx,'#ffd882',x+mx,boss.y+my-2,3,4)
   }
+}
+const heliFlashCanvas = document.createElement('canvas')
+// Quadro do giro (0 = pás nítidas ... 4 = disco): ao entrar o rotor ganha velocidade, em voo alterna os quadros mais rápidos
+// (o disco e uma pá borrada, para cintilar) e, quando ele cai, o giro vai parando
+const heliSpinCycle = [4, 4, 3, 4, 4, 2]
+function heliSpin(h) {
+  if (h.phase === 'enter') return Math.min(3, Math.floor(h.t / 2.2 * 4))
+  if (h.phase === 'dying') return Math.max(0, 4 - Math.floor(h.dyingT * 2.4))
+  return heliSpinCycle[Math.floor(elapsed * 20) % heliSpinCycle.length]
+}
+function drawHeli(scroll) {
+  const h = boss.heli
+  if (h.phase === 'idle' || h.phase === 'gone') return
+  const [fw, fh] = heliMeta.frame
+  const hs = heliScale()
+  const half = hs / pixelScale   // as folhas estão em 2x
+  const x = Math.round(boss.x - scroll)
+  if (x < -heliMeta.frame[0] * half || x > width + heliMeta.frame[0] * half) return
+  const bob = h.phase === 'dying' ? 0 : Math.sin(elapsed * 5) * 1.6
+  const y = Math.round(boss.y + bob)
+  const [ax, ay] = heliMeta.anchor
+  // sombra no chão: some com a altura
+  const altitude = Math.max(0, groundY - boss.y)
+  ctx.save()
+  ctx.globalAlpha = Math.max(0, .34 - altitude / 420)
+  ctx.fillStyle = '#05030a'
+  ctx.beginPath()
+  ctx.ellipse(x - 8, groundY + 3, (118 - altitude * .2) * hs, 7, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+  ctx.save()
+  ctx.translate(x, y - 60 * hs)   // inclina um pouco para o lado em que voa, em torno do meio do casco
+  ctx.scale(h.face, 1)   // voando para a esquerda, o helicóptero vira
+  ctx.rotate(h.tilt)
+  ctx.translate(0, 60 * hs)
+  const pose = h.pose
+  const sx = (pose % heliMeta.cols) * fw, sy = Math.floor(pose / heliMeta.cols) * fh
+  const flash = elapsed < boss.flashUntil
+  if (flash) {
+    heliFlashCanvas.width = fw
+    heliFlashCanvas.height = fh
+    const fctx = heliFlashCanvas.getContext('2d')
+    fctx.drawImage(sprites.heliBody, sx, sy, fw, fh, 0, 0, fw, fh)
+    fctx.globalCompositeOperation = 'source-atop'
+    fctx.fillStyle = 'rgba(255, 34, 46, .6)'
+    fctx.fillRect(0, 0, fw, fh)
+    ctx.drawImage(heliFlashCanvas, 0, 0, fw, fh, -ax * half, -ay * half, fw * half, fh * half)
+  } else ctx.drawImage(sprites.heliBody, sx, sy, fw, fh, -ax * half, -ay * half, fw * half, fh * half)
+  // cauda com a hélice traseira e rotor principal: 5 quadros do giro lento (pás nítidas) ao disco borrado
+  const spin = heliSpin(h)
+  const tail = heliMeta.tails[spin]
+  ctx.drawImage(sprites['heliTail' + (spin + 1)], (tail.x - ax) * half, (tail.y - ay) * half, tail.size[0] * half, tail.size[1] * half)
+  const rotor = heliMeta.rotors[spin]
+  ctx.drawImage(sprites['heliRotor' + (spin + 1)], (rotor.x - ax) * half, (rotor.y - ay) * half, rotor.size[0] * half, rotor.size[1] * half)
+  ctx.restore()
 }
 function drawMover(m,scroll) {
   if (m.manual) return
@@ -2685,7 +2971,9 @@ Promise.all([
       loadImage('fofaoFall','assets/fofao/queda.png'),
       loadImage('chapolimRun','assets/chapolim/corrida.png'), loadImage('chapolimAttack','assets/chapolim/ataque.png'), loadImage('chapolimFall','assets/chapolim/queda.png'), loadImage('chapolimJump','assets/chapolim/salto.png')] : []),
     ...fase21.wheels.map((wheel, i) => loadImage('wheel' + (i + 1),'assets/fase2/rodas/' + wheel.file))
-  ] : [loadImage('bg','assets/cidade.webp')]),
+  ] : [loadImage('bg','assets/cidade.webp'),
+    loadImage('heliBody','assets/boss-heli/corpo.png'),
+    ...[1,2,3,4,5].flatMap(n => [loadImage('heliRotor' + n,'assets/boss-heli/rotor' + n + '.png'), loadImage('heliTail' + n,'assets/boss-heli/cauda' + n + '.png')])]),
   loadImage('patrol','assets/patrulheiro-ex-movimento-v2.png'),
   loadImage('patrolFall','assets/patrulheiro-ex-queda.png'),
   loadImage('elite','assets/soldado-elite-movimento.png'),

@@ -17,6 +17,7 @@ import * as comboCounter from './vendor/pixelfx/src/fx/ui/combo-counter.js'
 import * as shatterWipe from './vendor/pixelfx/src/fx/transitions/shatter-wipe.js'
 import * as levelUp from './vendor/pixelfx/src/fx/ui/level-up.js'
 import * as cannonball from './vendor/pixelfx/src/fx/projectiles/cannonball.js'
+import * as smallExplosion from './vendor/pixelfx/src/fx/explosions/small-explosion.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 
 const maxOneShots = 28
@@ -139,6 +140,11 @@ export function createGameFx(width, height) {
     /** Explosão (clarão, faíscas, brasas e fumaça do cannonball, sem a bala) em x, na altura do chão floor; height = altura do centro. */
     blast({ x, floor, flip = false, height = 14 }) {
       oneShots.push(createFx(cannonball, { x, y: floor, flip, seed: seed(), height, ball: false }))
+      if (oneShots.length > maxOneShots) oneShots.shift()
+    },
+    /** Explosão de bomba no chão (small-explosion do pixelfx): clarão, fogo que vira fumaça, faíscas e pedras. size = tamanho (1 = o do efeito). */
+    bomb({ x, floor, size = .6 }) {
+      oneShots.push(createFx(smallExplosion, { x, y: floor, seed: seed(), size }))
       if (oneShots.length > maxOneShots) oneShots.shift()
     },
     /** Golpe crítico (crit-hit) onde o ataque acertou: x, chão do alvo e altura do peito. */
