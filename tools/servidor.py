@@ -3,13 +3,14 @@
 Uso:  python tools/servidor.py [porta]        (padrão 8787, só aceita conexões do próprio computador)
 
 Além dos arquivos, expõe um único endpoint de escrita:
-  POST /api/sprite-config   grava assets/sprite-config.json (os canos das armas editados em sprites.html)
+  POST /api/sprite-config   grava assets/sprite-config.json (os canos das armas e os quadros ocultos editados em sprites.html)
 Nada mais pode ser gravado por aqui. O conteúdo é validado, o arquivo anterior vira
 assets/sprite-config.bak.json e a troca é atômica.
 """
 import json
 import math
 import os
+import re
 import sys
 import tempfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -28,10 +29,37 @@ def _ponto(p):
             and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and abs(v) <= 500 for v in p))
 
 
+CHAVE_SPRITE = re.compile(r'^[A-Za-z0-9_]{1,40}$')
+
+
+def _int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def validar_ocultos(ocultos):
+    """Quadros ocultos por sprite: { chave: { "de": total de quadros, "quadros": [índices a partir de 0] } }."""
+    if not isinstance(ocultos, dict):
+        return '"ocultos" precisa ser um objeto'
+    for chave, item in ocultos.items():
+        if not CHAVE_SPRITE.match(chave):
+            return f'chave de sprite inválida: {chave}'
+        if not isinstance(item, dict) or not _int(item.get('de')) or not 2 <= item['de'] <= 64:
+            return f'"{chave}": "de" precisa ser o total de quadros (2 a 64)'
+        quadros = item.get('quadros')
+        if (not isinstance(quadros, list) or not quadros or len(set(quadros)) != len(quadros) or len(quadros) >= item['de']
+                or any(not _int(q) or not 0 <= q < item['de'] for q in quadros)):
+            return f'"{chave}": "quadros" precisa ser uma lista sem repetição, de 0 a {item["de"] - 1}, deixando ao menos um quadro visível'
+    return None
+
+
 def validar(dados):
     """Devolve uma mensagem de erro, ou None se o conteúdo é válido."""
     if not isinstance(dados, dict) or not isinstance(dados.get('canos'), dict):
         return 'faltou o objeto "canos"'
+    if 'ocultos' in dados:
+        erro = validar_ocultos(dados['ocultos'])
+        if erro:
+            return erro
     for chave, lista in dados['canos'].items():
         if chave not in CANOS:
             return f'chave desconhecida: {chave}'
@@ -48,7 +76,12 @@ def formatar(dados):
     for chave, lista in dados['canos'].items():
         itens = ','.join('null' if p is None else '[' + ','.join(f'{v:g}' for v in p) + ']' for p in lista)
         linhas.append(f'    "{chave}": [{itens}]')
-    return '{\n  "versao": 1,\n  "canos": {\n' + ',\n'.join(linhas) + '\n  }\n}\n'
+    texto = '{\n  "versao": 1,\n  "canos": {\n' + ',\n'.join(linhas) + '\n  }'
+    ocultos = dados.get('ocultos') or {}
+    if ocultos:
+        itens = [f'    "{c}": {{"de": {o["de"]}, "quadros": [{",".join(str(q) for q in sorted(o["quadros"]))}]}}' for c, o in sorted(ocultos.items())]
+        texto += ',\n  "ocultos": {\n' + ',\n'.join(itens) + '\n  }'
+    return texto + '\n}\n'
 
 
 class Handler(SimpleHTTPRequestHandler):

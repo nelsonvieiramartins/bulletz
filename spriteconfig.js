@@ -5,8 +5,21 @@
 const finite = (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 500
 const isPoint = (p) => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1])
 
+// Quadros ocultos no editor (botão APLICAR): { chave da folha: { de, quadros } } vira, em alvos.ocultos, { chave: { count, hidden: Set, vis: [quadros visíveis] } }.
+function lerOcultos(ocultos, destino) {
+  if (!destino || !ocultos || typeof ocultos !== 'object') return
+  for (const [chave, item] of Object.entries(ocultos)) {
+    const count = item?.de
+    if (!Number.isInteger(count) || count < 2 || count > 64 || !Array.isArray(item.quadros)) continue
+    const hidden = new Set(item.quadros.filter((q) => Number.isInteger(q) && q >= 0 && q < count))
+    const vis = Array.from({ length: count }, (_, i) => i).filter((i) => !hidden.has(i))
+    if (hidden.size && vis.length) destino[chave] = { count, hidden, vis }
+  }
+}
+
 /**
  * alvos: { runFire: [[x,y]...], idleFire: [x,y], crouch: [x,y], jump: [[x,y],[x,y]], patrol: [x,y], boss: [[x,y]...] }
+ * alvos.ocultos (objeto vazio) recebe os quadros ocultos de cada folha.
  * Os arrays do jogo são alterados no lugar, então quem já guardou a referência enxerga os novos valores.
  */
 export async function applySpriteConfig(alvos) {
@@ -14,7 +27,9 @@ export async function applySpriteConfig(alvos) {
   try {
     const response = await fetch('assets/sprite-config.json?t=' + Date.now(), { cache: 'no-store' })
     if (!response.ok) return
-    cfg = (await response.json()).canos
+    const json = await response.json()
+    cfg = json.canos
+    lerOcultos(json.ocultos, alvos.ocultos)
   } catch (error) {
     console.warn('sprite-config.json não carregado; usando os valores padrão.', error)
     return

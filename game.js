@@ -1,7 +1,7 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js?v=2'
 import { createGameFx } from './gamefx.js?v=12'
-import { applySpriteConfig } from './spriteconfig.js'
+import { applySpriteConfig } from './spriteconfig.js?v=2'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js?v=2'
 import { createMidiPlayer } from './midiplayer.js'
@@ -230,7 +230,20 @@ const eliteWidthScale = .92
 const standardDroneScale = .76
 const bossMuzzles = [[-56,-41],[-57,-41],[-57,-33]]
 // Canos editados em sprites.html (assets/sprite-config.json) substituem os valores acima
-await applySpriteConfig({ runFire: runFireMuzzles, idleFire: idleFireMuzzle, crouch: crouchFireMuzzle, jump: jumpFireMuzzles, patrol: enemyMuzzles.patrol, boss: bossMuzzles })
+// Quadros ocultos no editor (APLICAR): o jogo passa direto por eles. spriteHidden[folha] = { count, hidden: Set, vis: [quadros visíveis] }
+const spriteHidden = {}
+await applySpriteConfig({ runFire: runFireMuzzles, idleFire: idleFireMuzzle, crouch: crouchFireMuzzle, jump: jumpFireMuzzles, patrol: enemyMuzzles.patrol, boss: bossMuzzles, ocultos: spriteHidden })
+// Troca um quadro oculto pelo próximo visível. Folhas em ciclo (parado, corrida e queda do Edu e do Operador) repartem o ciclo só pelos quadros
+// visíveis (o ciclo dura o mesmo tempo, sem quadro repetido); poses de estado (agachar, pulo) e inimigos usam o próximo quadro visível.
+const cycleSheets = new Set(['idle', 'run', 'runFire', 'playerFall', 'op_idle', 'op_run', 'op_runFire', 'op_playerFall'])
+function mapFrame(sheet, frame) {
+  const h = spriteHidden[sheet]
+  if (!h) return frame
+  if (cycleSheets.has(sheet)) return h.vis[Math.min(h.vis.length - 1, Math.floor(frame * h.vis.length / h.count))]
+  if (!h.hidden.has(frame)) return frame
+  for (let i = 1; i < h.count; i++) { const g = (frame + i) % h.count; if (!h.hidden.has(g)) return g }
+  return frame
+}
 const enemies = []
 const enemyShots = []
 const maxLives = 3
@@ -3099,27 +3112,27 @@ function playerPose() {
   const s = set.prefix
   if (player.fall) {
     const frame = Math.min(sequences.playerFall.count - 1, Math.floor(player.fall.age / fallFrameDuration))
-    return { sheet: s + 'playerFall', frame }
+    return { sheet: s + 'playerFall', frame: mapFrame(s + 'playerFall', frame) }
   }
   const holdingAim = player.trigger || player.cooldown > 0
   if (player.crouch > 0) {
-    if (holdingAim) return { sheet: s + 'crouch', frame: 2, muzzle: set.crouch }
-    return { sheet: s + 'crouch', frame: player.crouch < .6 ? 0 : 1 }
+    if (holdingAim) return { sheet: s + 'crouch', frame: mapFrame(s + 'crouch', 2), muzzle: set.crouch }
+    return { sheet: s + 'crouch', frame: mapFrame(s + 'crouch', player.crouch < .6 ? 0 : 1) }
   }
   if (!player.grounded) {
     // pulo: 0 subindo, 1 caindo, 2 e 3 os mesmos mirando; subindo, as pernas encolhem e o corpo sobe
     const rising = player.vy < 0
     const lift = rising ? set.tuckLift : 0
-    if (player.trigger || player.cooldown > .04) return { sheet: s + 'jump', frame: rising ? 2 : 3, lift, muzzle: set.jump[rising ? 0 : 1] }
-    return { sheet: s + 'jump', frame: rising ? 0 : 1, lift }
+    if (player.trigger || player.cooldown > .04) return { sheet: s + 'jump', frame: mapFrame(s + 'jump', rising ? 2 : 3), lift, muzzle: set.jump[rising ? 0 : 1] }
+    return { sheet: s + 'jump', frame: mapFrame(s + 'jump', rising ? 0 : 1), lift }
   }
   if (Math.abs(player.vx) > 8) {
-    const frame = Math.floor(player.phase)
-    if (player.trigger || player.cooldown > .04) return { sheet: s + 'runFire', frame, muzzle: set.runFire[frame] }
-    return { sheet: s + 'run', frame }
+    const phase = Math.floor(player.phase)
+    if (player.trigger || player.cooldown > .04) { const frame = mapFrame(s + 'runFire', phase); return { sheet: s + 'runFire', frame, muzzle: set.runFire[frame] } }
+    return { sheet: s + 'run', frame: mapFrame(s + 'run', phase) }
   }
   if (holdingAim) return { sheet: s + 'idleFire', frame: 0, muzzle: set.idleFire }
-  return { sheet: s + 'idle', frame: Math.floor(player.idleTime * breathingFps) % sequences.idle.count }
+  return { sheet: s + 'idle', frame: mapFrame(s + 'idle', Math.floor(player.idleTime * breathingFps) % sequences.idle.count) }
 }
 
 function fill(context,color,x,y,w,h) {
@@ -3148,6 +3161,7 @@ function terrain(x,y,w,scroll) {
   }
 }
 function enemyFrame(sheet, frame, x, y, face, hitFlash = false, tint = null) {
+  frame = mapFrame(sheet, frame)   // quadros ocultos no editor de sprites
   const [w,h,anchorX,anchorY] = enemyFrames[sheet]
   ctx.save()
   ctx.translate(Math.round(x),Math.round(y))
@@ -3929,7 +3943,7 @@ Promise.all([
       get lives() { return players[0].lives }, set lives(v) { for (const p of players) p.lives = v },
       get weather() { return weather }, set weather(v) { weather = v },
       get rain() { return rainAmount },
-      get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
+      mapFrame, spriteHidden, get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
       get storm() { return storm }, get waveIndex() { return waveState.index },
       setWave(i) { waveState.index = i; rainAmount = rainByWave[Math.min(i, rainByWave.length - 1)]; weather = weatherByWave[Math.min(i, weatherByWave.length - 1)] },
       get god() { return players[0].inv > 1e5 }, set god(v) { for (const p of players) p.inv = v ? 1e9 : 0 },

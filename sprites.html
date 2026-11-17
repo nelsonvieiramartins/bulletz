@@ -40,11 +40,19 @@
   .thumb canvas { display: block; image-rendering: pixelated; margin: 0 auto 2px; }
   .thumb:hover { border-color: #6b5a92; }
   .thumb.on { border-color: var(--accent); color: var(--accent); }
+  .thumb.off canvas { opacity: .25; filter: grayscale(1); }
+  .thumb.off { border-style: dashed; text-decoration: line-through; }
   .hint { color: var(--dim); font-size: 12px; }
   kbd { background: #2e2447; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
   .back { margin-left: auto; color: var(--accent); text-decoration: none; font-size: 13px; }
   .editbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: #261a3a; border: 1px solid #5a3f86; border-radius: 8px; padding: 9px 12px; }
   .editbar[hidden] { display: none; }
+  .applybar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: #1d2a2a; border: 1px solid #2f6b57; border-radius: 8px; padding: 9px 12px; }
+  .applybar .tag { color: #6fe0a0; font-weight: 600; font-size: 13px; }
+  button.b.apply { background: #2f7d4f; border-color: #43b36f; color: #fff; font-weight: 700; letter-spacing: .5px; }
+  button.b.apply:disabled { opacity: .45; background: #2e2447; border-color: var(--line); }
+  #applyinfo { font-size: 13px; color: var(--dim); }
+  #applyinfo.ok { color: #6fe0a0; } #applyinfo.err { color: #ff8a8a; } #applyinfo.dirty { color: #ffcf6b; }
   .editbar .tag { color: var(--accent); font-weight: 600; font-size: 13px; }
   #editinfo { color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
   #editinfo b { color: var(--text); }
@@ -92,6 +100,14 @@
     <button class="b on" id="grid" title="Pixels (G)">Grade</button>
     <button class="b on" id="pts" title="Pontos (P)">Âncora / cano</button>
     <button class="b on" id="onion" title="Sombra do quadro anterior (O)">Onion skin</button>
+    <button class="b" id="hide" title="Oculta este quadro: o Play passa direto por ele (H)">Ocultar quadro</button>
+    <button class="b" id="showall" title="Mostra de novo todos os quadros deste sprite">Mostrar todos</button>
+  </div>
+
+  <div class="applybar" id="applybar">
+    <span class="tag">▶ Quadros ocultos no jogo</span>
+    <button class="b apply" id="applyhide" title="Grava os quadros ocultos em assets/sprite-config.json: o jogo passa a usar o sprite sem eles" disabled>APLICAR NO JOGO</button>
+    <span id="applyinfo"></span>
   </div>
 
   <div class="editbar" id="editbar" hidden>
@@ -106,7 +122,7 @@
   </div>
   <div class="info" id="info"></div>
   <div id="strip"></div>
-  <div class="hint"><kbd>←</kbd> <kbd>→</kbd> quadro · <kbd>Espaço</kbd> play · <kbd>↑</kbd> <kbd>↓</kbd> trocar sprite · <kbd>F</kbd> espelhar · <kbd>G</kbd> grade · <kbd>P</kbd> pontos · <kbd>O</kbd> onion · <kbd>E</kbd> editar cano (com a edição ligada: setas movem o ponto e <kbd>,</kbd> <kbd>.</kbd> trocam de quadro) · clique num quadro da faixa para escolher</div>
+  <div class="hint"><kbd>←</kbd> <kbd>→</kbd> quadro · <kbd>Espaço</kbd> play · <kbd>↑</kbd> <kbd>↓</kbd> trocar sprite · <kbd>F</kbd> espelhar · <kbd>G</kbd> grade · <kbd>P</kbd> pontos · <kbd>O</kbd> onion · <kbd>H</kbd> ocultar/mostrar quadro (o Play pula os ocultos) · <kbd>E</kbd> editar cano (com a edição ligada: setas movem o ponto e <kbd>,</kbd> <kbd>.</kbd> trocam de quadro) · clique num quadro da faixa para escolher</div>
 </main>
 
 <script>
@@ -123,6 +139,14 @@ const hm = (m) => m && [heroAnchor[0] + m[0] * 2, heroAnchor[1] + m[1] * 2]
 const heroRunFireMuzzles = [[26,-48.5],[28,-50],[27,-49.5],[28,-51],[28,-47.5],[28,-49.5],[28,-50],[28,-50]].map(hm)
 const hero = { w: HW, h: HH, anchor: heroAnchor }
 
+// Operador (assets/operador, gerado de GRAPHIC/Player 2_new): mesmas células de 192x160 e pés em (80,152) do Edu. Os canos vêm do config.json dele.
+let opCfg = null
+const op = (id, name, file, cols, count, key) => {
+  const sprite = { id, name, file: 'operador/' + file + '?v=12', ...hero, cols, count }
+  // os canos vêm do config.json do Operador (lido ao abrir a página); definidos como getter para valer depois da leitura
+  if (key) Object.defineProperty(sprite, 'muzzles', { configurable: true, get() { return opCfg ? opCfg[key].map((m) => (m ? hm(m) : null)) : undefined } })
+  return sprite
+}
 const SPRITES = [
   { group: 'Edu (jogador)' },
   { id: 'idle',       name: 'Respiração (parado)', file: 'edu-v2/respiracao.png',       ...hero, cols: 4, count: 4 },
@@ -132,6 +156,14 @@ const SPRITES = [
   { id: 'crouch',     name: 'Agachado',            file: 'edu-v2/agachamento.png',      ...hero, cols: 3, count: 3, muzzles: [null, null, hm([26,-31])] },
   { id: 'jump',       name: 'Pulo',                file: 'edu-v2/pulo.png',             ...hero, cols: 4, count: 4, muzzles: [null, null, hm([29,-39]), hm([27,-52])] },
   { id: 'playerFall', name: 'Morte (queda)',       file: 'edu-v2/queda.png?v=2',        ...hero, cols: 4, count: 4 },
+  { group: 'Operador (jogador 2)' },
+  op('op-idle',       'Respiração (parado)', 'respiracao.png',       4, 4),
+  op('op-run',        'Corrida',             'corrida.png',          4, 8),
+  op('op-runFire',    'Corrida atirando',    'corrida-atirando.png', 4, 8, 'runFire'),
+  op('op-idleFire',   'Parado atirando',     'parado-atirando.png',  1, 1, 'idleFire'),
+  op('op-crouch',     'Agachado',            'agachamento.png',      3, 3, 'crouch'),
+  op('op-jump',       'Pulo',                'pulo.png',             4, 4, 'jump'),
+  op('op-playerFall', 'Morte (queda)',       'queda.png',            4, 4),
   { group: 'Edu antigo (96 px, para comparar)' },
   { id: 'old-idle',       name: 'Respiração (antigo)', file: 'respiracao.png',            w: S, h: S, cols: 4, count: 4, anchor: playerAnchor },
   { id: 'old-run',        name: 'Corrida (antigo)',    file: 'corrida-colete-jeans.png',  w: S, h: S, cols: 4, count: 8, anchor: playerAnchor },
@@ -167,6 +199,24 @@ const stage = $('stage'), sctx = stage.getContext('2d')
 const state = { sprite: items[0], frame: 0, playing: false, flip: false, grid: true, pts: true, onion: true, zoom: 4, fps: 8, last: 0 }
 const imgs = {}
 let bgImage = null
+// Quadros ocultos para teste: o Play pula esses quadros (as setas e a faixa ainda chegam neles, para mostrar de novo). Guardado no navegador.
+let hiddenFrames = {}
+let hasDraft = false
+try { const raw = localStorage.getItem('bulletz.sprites.ocultos'); if (raw !== null) { hiddenFrames = JSON.parse(raw) || {}; hasDraft = true } } catch {}
+// O que está APLICADO no jogo (assets/sprite-config.json). O rascunho (hiddenFrames) só vai para o jogo quando se aperta APLICAR NO JOGO.
+// Ids do editor -> nome da folha no jogo (o Operador usa op_ no lugar de op-); só estes sprites existem no jogo.
+let appliedHidden = {}
+const gameKey = (id) => id.replace(/^op-/, 'op_')
+const editorId = (key) => key.replace(/^op_/, 'op-')
+const GAME_IDS = new Set(['idle', 'run', 'runFire', 'idleFire', 'crouch', 'jump', 'playerFall', 'op-idle', 'op-run', 'op-runFire', 'op-idleFire', 'op-crouch', 'op-jump', 'op-playerFall',
+  'patrol', 'patrolFall', 'drone', 'boss', 'fofaoRun', 'fofaoAttack', 'fofaoAttack2', 'fofaoFall', 'chapolimRun', 'chapolimAttack', 'chapolimFall'])
+const isHidden = (s, f) => !!hiddenFrames[s.id]?.includes(f)
+const saveHidden = () => { try { localStorage.setItem('bulletz.sprites.ocultos', JSON.stringify(hiddenFrames)) } catch {} }
+// próximo quadro visível a partir de f (passo +1 ou -1); se todos estiverem ocultos, fica onde está
+function nextVisible(s, f, step = 1) {
+  for (let i = 1; i <= s.count; i++) { const g = (((f + step * i) % s.count) + s.count) % s.count; if (!isHidden(s, g)) return g }
+  return f
+}
 const load = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src })
 
 // ---- edição permanente dos canos (assets/sprite-config.json, lido pelo jogo) ----
@@ -200,7 +250,11 @@ const setStatus = (msg, kind = '') => { $('status').textContent = msg; $('status
 async function loadConfig() {
   try {
     const r = await fetch('assets/sprite-config.json?t=' + Date.now(), { cache: 'no-store' })
-    if (r.ok) { const j = await r.json(); for (const k of Object.keys(DEFAULT_CANOS)) if (j.canos?.[k]) cfg.canos[k] = j.canos[k] }
+    if (r.ok) {
+      const j = await r.json(); for (const k of Object.keys(DEFAULT_CANOS)) if (j.canos?.[k]) cfg.canos[k] = j.canos[k]
+      for (const [key, o] of Object.entries(j.ocultos || {})) if (Array.isArray(o?.quadros)) appliedHidden[editorId(key)] = [...o.quadros].sort((a, b) => a - b)
+      if (!hasDraft) hiddenFrames = JSON.parse(JSON.stringify(appliedHidden))   // sem rascunho guardado, parte do que o jogo já usa
+    }
   } catch (e) { console.warn('sprite-config.json não carregado; usando os valores padrão.', e) }
   savedStr = JSON.stringify(cfg.canos)
 }
@@ -250,7 +304,7 @@ $('dl').onclick = downloadJson
 $('save').onclick = async () => {
   setStatus('Salvando…')
   try {
-    const r = await fetch('/api/sprite-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versao: 1, canos: cfg.canos }) })
+    const r = await fetch('/api/sprite-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versao: 1, canos: cfg.canos, ocultos: ocultosPayload(appliedHidden) }) })
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(j.erro || ('HTTP ' + r.status))
     savedStr = JSON.stringify(cfg.canos); $('dl').hidden = true
@@ -303,8 +357,9 @@ function render() {
   const s = state.sprite, z = state.zoom, f = state.frame
   stage.width = s.w * z; stage.height = s.h * z
   paintBackground(sctx, stage.width, stage.height)
-  if (state.onion && state.sprite.count > 1) drawFrame(sctx, s, (f - 1 + s.count) % s.count, 0, 0, z, state.flip, .28)
-  drawFrame(sctx, s, f, 0, 0, z, state.flip)
+  if (state.onion && state.sprite.count > 1) drawFrame(sctx, s, nextVisible(s, f, -1), 0, 0, z, state.flip, .28)
+  drawFrame(sctx, s, f, 0, 0, z, state.flip, isHidden(s, f) ? .3 : 1)
+  if (isHidden(s, f)) { sctx.fillStyle = '#ff4d6d'; sctx.font = 'bold 14px system-ui'; sctx.fillText('OCULTO · o Play pula este quadro', 10, 20) }
   if (state.grid && z >= 4) {
     sctx.strokeStyle = 'rgba(255,255,255,.07)'; sctx.lineWidth = 1; sctx.beginPath()
     for (let x = 0; x <= s.w; x++) { sctx.moveTo(x * z + .5, 0); sctx.lineTo(x * z + .5, stage.height) }
@@ -334,7 +389,14 @@ function render() {
   $('info').innerHTML = `Quadro <b>${f + 1}</b> de <b>${s.count}</b> · coluna ${col + 1}, linha ${row + 1} · recorte x=<b>${col * s.w}</b> y=<b>${row * s.h}</b>`
     + (s.anchor ? ` · <span style="color:#47e0ff">✚ âncora</span> (${s.anchor.map(n => +n.toFixed(1)).join(', ')})` : '')
     + (s.muzzles && s.muzzles[f] ? ` · <span style="color:#ff4d6d">● cano</span>` : '')
-  document.querySelectorAll('.thumb').forEach((t, i) => t.classList.toggle('on', i === f))
+    + (isHidden(s, f) ? ` · <span style="color:#ff4d6d">oculto</span>` : '')
+    + (hiddenFrames[s.id]?.length ? ` · ${hiddenFrames[s.id].length} oculto${hiddenFrames[s.id].length > 1 ? 's' : ''}` : '')
+  document.querySelectorAll('.thumb').forEach((t, i) => { t.classList.toggle('on', i === f); t.classList.toggle('off', isHidden(s, i)) })
+  $('hide').textContent = isHidden(s, f) ? 'Mostrar quadro' : 'Ocultar quadro'
+  $('hide').classList.toggle('on', isHidden(s, f))
+  $('hide').disabled = s.count < 2
+  $('showall').disabled = !hiddenFrames[s.id]?.length
+  syncApply()
   syncEdit()
 }
 
@@ -377,6 +439,49 @@ function buildList() {
   }
 }
 
+// ---- APLICAR NO JOGO: grava os quadros ocultos em assets/sprite-config.json (chave "ocultos"), que o jogo lê ao abrir ----
+const normHidden = (map) => Object.fromEntries(Object.entries(map).filter(([id, l]) => GAME_IDS.has(id) && l.length).map(([id, l]) => [id, [...l].sort((a, b) => a - b)]))
+function ocultosPayload(map) {
+  const out = {}
+  for (const [id, l] of Object.entries(normHidden(map))) { const sp = items.find((x) => x.id === id); if (sp) out[gameKey(id)] = { de: sp.count, quadros: l } }
+  return out
+}
+const applyDirty = () => JSON.stringify(normHidden(hiddenFrames)) !== JSON.stringify(normHidden(appliedHidden))
+function setApplyInfo(msg, kind = '') { $('applyinfo').textContent = msg; $('applyinfo').className = kind }
+function syncApply() {
+  const dirty = applyDirty(), n = Object.values(normHidden(appliedHidden)).reduce((a, l) => a + l.length, 0)
+  $('applyhide').disabled = !dirty
+  if (dirty) setApplyInfo('Mudanças ainda não aplicadas no jogo.', 'dirty')
+  else if ($('applyinfo').className !== 'ok' && $('applyinfo').className !== 'err') setApplyInfo(n ? `No jogo: ${n} quadro${n > 1 ? 's' : ''} oculto${n > 1 ? 's' : ''}.` : 'Nenhum quadro oculto no jogo.')
+  else if ($('applyinfo').className === 'ok' && dirty) setApplyInfo('Mudanças ainda não aplicadas no jogo.', 'dirty')
+}
+async function applyHidden() {
+  const payload = ocultosPayload(hiddenFrames)
+  try {
+    const r = await fetch('/api/sprite-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versao: 1, canos: JSON.parse(savedStr), ocultos: payload }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.erro || ('HTTP ' + r.status))
+    appliedHidden = JSON.parse(JSON.stringify(normHidden(hiddenFrames)))
+    const n = Object.values(appliedHidden).reduce((a, l) => a + l.length, 0)
+    setApplyInfo(n ? `Aplicado! O jogo usa o sprite sem ${n} quadro${n > 1 ? 's' : ''}. Recarregue o jogo para ver.` : 'Aplicado! O jogo volta a usar todos os quadros. Recarregue o jogo.', 'ok')
+  } catch (err) {
+    setApplyInfo('Não aplicou (' + err.message + '). Inicie o jogo com "python tools/servidor.py" (reinicie se ele já estava aberto).', 'err')
+  }
+  render()
+}
+$('applyhide').onclick = applyHidden
+function toggleHideFrame() {
+  const s = state.sprite, f = state.frame
+  if (s.count < 2) return
+  const list = new Set(hiddenFrames[s.id] || [])
+  if (list.has(f)) list.delete(f)
+  else if (list.size < s.count - 1) list.add(f)   // sempre sobra pelo menos um quadro visível
+  else return
+  if (list.size) hiddenFrames[s.id] = [...list].sort((a, b) => a - b); else delete hiddenFrames[s.id]
+  saveHidden(); render()
+}
+$('hide').onclick = toggleHideFrame
+$('showall').onclick = () => { delete hiddenFrames[state.sprite.id]; saveHidden(); render() }
 $('prev').onclick = () => { state.playing = false; setFrame(state.frame - 1) }
 $('next').onclick = () => { state.playing = false; setFrame(state.frame + 1) }
 $('play').onclick = () => { state.playing = !state.playing; updatePlay() }
@@ -403,14 +508,16 @@ addEventListener('keydown', (e) => {
   else if (k === 'g') $('grid').click()
   else if (k === 'p') $('pts').click()
   else if (k === 'o') $('onion').click()
+  else if (k === 'h') toggleHideFrame()
 })
 
 function tick(t) {
-  if (state.playing && state.sprite.count > 1 && t - state.last >= 1000 / state.fps) { state.last = t; setFrame(state.frame + 1) }
+  if (state.playing && state.sprite.count > 1 && t - state.last >= 1000 / state.fps) { state.last = t; setFrame(nextVisible(state.sprite, state.frame)) }
   requestAnimationFrame(tick)
 }
 
 ;(async () => {
+  try { opCfg = await (await fetch('assets/operador/config.json?v=12', { cache: 'no-store' })).json() } catch (error) { console.warn('config do Operador não carregada', error) }
   buildList()
   await loadConfig()
   bgImage = await load('assets/cidade.webp')
