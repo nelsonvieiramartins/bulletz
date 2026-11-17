@@ -44,7 +44,11 @@ body[data-mode=title] .touch,body[data-mode=menu] .touch,body[data-mode=select] 
 .start-button:hover{border-color:#fff;filter:brightness(1.08)}
 .start-button:active{transform:translateY(3px);box-shadow:0 1px 0 #8f2a24}
 .title-screen .start-button{animation:pulse 1.2s ease-in-out infinite}
-.title-links{display:flex;flex-wrap:wrap;justify-content:center;max-width:94%;gap:clamp(6px,1.4cqw,18px);margin-top:calc(clamp(8px,1.9cqw,26px) * -.2)}
+.title-links{position:absolute;left:12px;bottom:12px;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;max-width:calc(100% - 24px);gap:8px;z-index:2}
+.title-links>:not(.t-tools-toggle){display:none!important}
+.title-links.open>:not(.t-tools-toggle){display:flex!important}
+.title-links .t-tools-toggle{opacity:.35;padding:.4em .9em!important;font-size:11px!important}
+.title-links.open .t-tools-toggle,.title-links .t-tools-toggle:hover{opacity:1}
 .title-links a{font:700 clamp(10px,1.3cqw,15px) var(--mono);letter-spacing:.14em;text-transform:uppercase;text-decoration:none;color:#ffd9a0;background:#1b0f2acc;border:1px solid #ffb35a88;padding:.55em 1.1em;transition:background .15s,border-color .15s,color .15s}
 .title-links a:hover,.title-links a:focus-visible{background:#3a1f4a;border-color:#ffe7a6;color:#fff;outline:none}
 .title-hint{margin:0;font:700 clamp(9px,1.1cqw,13px) var(--mono);letter-spacing:.16em;color:#d9c3e4;opacity:.75}

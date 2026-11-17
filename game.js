@@ -504,7 +504,8 @@ if (!devTools) {
   document.querySelector('#menu-phone').onclick = () => setPhoneMode(!document.documentElement.classList.contains('modo-celular'))
   document.querySelector('#phone-toggle').onclick = (event) => { event.preventDefault(); setPhoneMode(!document.documentElement.classList.contains('modo-celular')) }
   document.querySelector('#dev-phone-off').onclick = () => setPhoneMode(false)
-  document.querySelector('#t-char').onclick = (event) => { event.preventDefault(); if (mode === 'title') { selectReturn = 'title'; openSelect() } }
+  { const nav = document.querySelector('.title-links'), tog = nav.querySelector('.t-tools-toggle')   // ferramentas de teste recolhidas num canto: a tela inicial fica só com a logo e o INICIAR JOGO
+    tog.onclick = () => { const open = nav.classList.toggle('open'); tog.setAttribute('aria-expanded', open); tog.blur() } }
   document.querySelector('#dev-test-end').onclick = () => { if (mode === 'play') document.querySelector('#test-end').click() }   // dispara o final da fase em que o Edu está
   document.querySelector('#dev-test-boss').onclick = () => { if (mode === 'play') document.querySelector('#test-boss').click() }
   document.querySelector('#test-boss').onclick = () => { if (onTruck) { announce('A Fase 2.1 não tem boss', 1.6); return } startBossTest(); resumeGame() }

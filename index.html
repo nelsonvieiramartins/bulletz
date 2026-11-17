@@ -13,8 +13,8 @@
 <title>BULLETZ — Divorced Dad Rock</title>
 <script>try{if(localStorage.getItem('bulletz.modoCelular')==='1'&&['localhost','127.0.0.1','[::1]'].indexOf(location.hostname)>=0)document.documentElement.classList.add('modo-celular')}catch(e){}</script>
 <script>try{if(sessionStorage.getItem('bulletz.autostart'))document.documentElement.classList.add('stage-loading');setTimeout(function(){document.documentElement.classList.remove('stage-loading')},10000)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=55">
-<script type="module" src="game.js?v=227"></script>
+<link rel="stylesheet" href="style.css?v=56">
+<script type="module" src="game.js?v=229"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -82,16 +82,14 @@
       <img class="title-logo" src="assets/logo-bulletz.png" alt="BULLETZ — Divorced Dad Rock">
       <button id="start" type="button" class="start-button art-btn art-iniciar">INICIAR JOGO</button>
       <nav class="title-links" aria-label="Ferramentas de teste">
-        <label>Jogadores <select class="t-jog" aria-label="Número de jogadores"><option value="1">1 jogador</option><option value="2">2 jogadores</option></select></label>
+        <button type="button" class="t-tools-toggle" aria-expanded="false">Teste</button>
         <label>Fase <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select></label>
         <label>Ir para <select class="t-alvo" aria-label="Ponto de teste"></select></label>
         <button type="button" class="t-go">Ir</button>
         <a href="efeitos.html">Teste FX</a>
         <a href="sprites.html">Sprites</a>
-        <a href="#" id="t-char" role="button">Personagem</a>
         <a href="#" id="phone-toggle" role="button">Modo celular</a>
       </nav>
-      <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
       <p id="ios-hint" class="title-hint ios-hint" hidden>TELA CHEIA NO iPHONE: TOQUE EM COMPARTILHAR <span aria-hidden="true">⎙</span> E EM “ADICIONAR À TELA DE INÍCIO”</p>
     </section>
 
@@ -234,7 +232,6 @@
     <section>
       <h2>Ir para</h2>
       <div class="dev-pick">
-        <select class="t-jog" aria-label="Número de jogadores"><option value="1">1 jogador</option><option value="2">2 jogadores</option></select>
         <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select>
         <select class="t-alvo" aria-label="Ponto de teste"></select>
         <button type="button" class="t-go">Ir</button>
