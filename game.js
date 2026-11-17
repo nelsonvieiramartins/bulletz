@@ -813,7 +813,13 @@ function spawnWaveEnemy({ type, level, side }) {
     enemies.push(enemy)
   } else {
     // entra pela borda esquerda da tela (por trás da carreta, se a câmera estiver na traseira)
-    const enemy = createEnemy({ x: Math.max(camera - 45, -45), type, min: -45, max: maxX - 6, y: fase21.level[level] })
+    // andar do jogador já com 5 inimigos: o novo entra em outro andar e fica patrulhando lá (ver maxPerLevel)
+    let spawnLevel = level
+    if (Math.abs(fase21.level[level] - player.levelY) < 30 && crowdAtPlayerLevel(null) >= maxPerLevel) {
+      const others = ['low', 'upper', 'roof'].filter((l) => Math.abs(fase21.level[l] - player.levelY) >= 30)
+      spawnLevel = others[Math.floor(Math.random() * others.length)]
+    }
+    const enemy = createEnemy({ x: Math.max(camera - 45, -45), type, min: -45, max: maxX - 6, y: fase21.level[spawnLevel] })
     enemy.face = 1
     enemy.route = 1
     enemy.delay = 1.3 + Math.random()*.8
@@ -2401,9 +2407,14 @@ const quakeRing = { time: .45, jumpClear: 16, radius: (age) => 6 + 46 * (1 - Mat
 // Rota do Fofão até o andar do Edu: devolve { x, jump } (x = para onde andar, jump = pular agora) ou null se já
 // estão no mesmo andar. Edu mais alto: vai até a plataforma que o aproxima mais do andar dele e pula nela.
 // Edu mais baixo: anda até a ponta da plataforma em que está e cai.
+// Fase 2.1: no máximo 5 inimigos por vez no andar em que o jogador está. Quem vê o andar cheio não vai para lá (nem sobe, nem desce):
+// fica patrulhando de um lado para o outro o andar em que está, até abrir vaga.
+const maxPerLevel = 5
+const crowdAtPlayerLevel = (enemy) => enemies.filter((e) => e !== enemy && e.hp > 0 && e.kind === 'melee' && Math.abs(e.y - player.levelY) < 30).length
 function meleeNav(enemy) {
   const diff = player.levelY - enemy.y
   if (Math.abs(diff) < 30) return null
+  if (onTruck && crowdAtPlayerLevel(enemy) >= maxPerLevel) return { hold: true }
   if (diff < 0) {
     let best = null
     for (const [x, y, w] of platforms) {
@@ -2479,7 +2490,18 @@ function updateMelee(enemy, distance, config, dt) {
     if (far < reach*enemy.standOff) target = (far < reach*.3 ? -dir : far > reach*.8 ? dir : enemy.paceDir) * config.speed * .55
     // em outro andar não fica rondando embaixo/em cima do Edu: segue a rota até o andar dele
     const nav = meleeNav(enemy)
-    if (nav) {
+    if (nav?.hold) {
+      // andar do jogador cheio: vai e volta pelo próprio andar, virando antes da ponta
+      enemy.holdDir ??= Math.random() < .5 ? 1 : -1
+      const here = platforms.find(([x, y, w]) => Math.abs(y - enemy.y) < 2 && enemy.x >= x - 6 && enemy.x <= x + w + 6)
+      if (here) {
+        const lo = Math.max(here[0] + 16, enemy.min + 10), hi = Math.min(here[0] + here[2] - 16, enemy.max - 10)
+        if (enemy.x <= lo) enemy.holdDir = 1
+        else if (enemy.x >= hi) enemy.holdDir = -1
+      }
+      target = enemy.holdDir * config.speed * .6
+      enemy.face = enemy.holdDir
+    } else if (nav) {
       const toNav = nav.x - enemy.x
       target = Math.abs(toNav) > 4 ? Math.sign(toNav) * config.speed : dir * 30
       if (nav.jump && enemy.jumpWait <= 0) { enemy.vy = -292; enemy.jumpWait = .8 }
