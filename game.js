@@ -400,8 +400,14 @@ const controlSets = twoPlayers
      { left: ['ArrowLeft'], right: ['ArrowRight'], down: ['ArrowDown'], jump: ['ArrowUp', 'Numpad0'], fire: ['KeyL', 'Numpad1', 'Numpad4'] }]
   : [{ left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'], down: ['ArrowDown', 'KeyS'], jump: ['Space', 'ArrowUp', 'KeyW'], fire: ['KeyG'] }]
 const alivePlayers = () => players.filter((p) => !p.fall && p.lives > 0)
-// A câmera segue o jogador mais à frente: quem fica para trás (no canto esquerdo) não segura a tela; a câmera o empurra junto.
+// A câmera segue o jogador mais à frente, mas TRAVA quando o de trás chega ao canto esquerdo da tela: o jogo só prossegue quando ele anda.
 const focusX = () => { const live = alivePlayers(); return live.length ? Math.max(...live.map((p) => p.x)) : players[0].x }
+// Alvo da câmera com 2 jogadores: o líder puxa a tela, mas ela nunca passa do jogador de trás (ele parado no canto esquerdo = tela travada)
+const cameraTarget = (lead) => {
+  const live = alivePlayers()
+  if (live.length < 2) return focusX() - lead
+  return Math.min(Math.max(...live.map((p) => p.x)) - lead, Math.min(...live.map((p) => p.x)) - 14)
+}
 const notice = select('#notice')
 const progressText = select('#progress')
 const livesText = select('#lives')
@@ -1692,7 +1698,7 @@ function update(dt) {
   while (sparks.length && sparks[0].t <= 0) sparks.shift()
   // a câmera segue o Edu pela carreta (com dois jogadores, o ponto médio entre os dois); no final, depois que ele desce, segue até o fim do desenho do pub
   const focus = focusX()
-  if (onTruck) camera += (clamp(focus - cameraLeadNow(),0,endSeq && endSeq.free ? pubCameraEnd() : cameraMaxNow()) - camera) * Math.min(1,dt * 6)
+  if (onTruck) camera += (clamp(cameraTarget(cameraLeadNow()),0,endSeq && endSeq.free ? pubCameraEnd() : cameraMaxNow()) - camera) * Math.min(1,dt * 6)
   else if (convoy) {   // a câmera abre a cena à frente do Edu, acompanha a carreta saindo e depois fica parada
     if (convoy.phase !== 'exit' && convoy.phase !== 'done') {
       const lead = width < wideWidth ? 50 : 110   // na tela estreita o Edu fica mais perto da borda para sobrar rua à frente
@@ -1700,7 +1706,7 @@ function update(dt) {
       camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
     }
   }
-  else camera += (clamp(focus - walkLead(),0,convoyWalk ? Infinity : end+50-width) - camera) * Math.min(1,dt * 6)
+  else camera += (clamp(cameraTarget(walkLead()),0,convoyWalk ? Infinity : end+50-width) - camera) * Math.min(1,dt * 6)
   const nextProgress = finish ? 100 : Math.floor(clamp((front.x-70)/(goal-70),0,.99)*100)
   if (!onTruck && nextProgress !== progress) {
     progress = nextProgress
