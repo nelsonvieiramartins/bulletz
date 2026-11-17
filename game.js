@@ -291,7 +291,7 @@ function createEnemy({ x, type, min, max, y }) {
     route: x % 3 === 0 ? 1 : -1, vx: 0, vy: 0, stride: 0, grounded: true, airTime: 0, landing: 0,
     attackAge: -1, attackKind: 0, struck: false, cooldown: 0, jumpWait: 0,
     special: null, specialAge: 0, specialUses: 0, aliveTime: 0, ghostTimer: 0,
-    standOff: .4 + Math.random()*.35, paceDir: 1, paceTimer: 0, slot: Math.random() - .5 }
+    standOff: .4 + Math.random()*.35, paceDir: 1, paceTimer: 0, slot: Math.random() - .5, engage: 55 + Math.random()*40, dodgeWait: 0 }
 }
 
 function populateEnemies(at) {
@@ -2422,11 +2422,21 @@ const quakeRing = { time: .45, jumpClear: 16, radius: (age) => 6 + 46 * (1 - Mat
 // Edu mais baixo: anda até a ponta da plataforma em que está e cai.
 // Fase 2.1: no máximo 5 inimigos por vez no andar em que o jogador está. Quem vê o andar cheio não vai para lá (nem sobe, nem desce):
 // fica patrulhando de um lado para o outro o andar em que está, até abrir vaga.
+// Fase 2.1: os inimigos fogem da linha de tiro. Quem está em outro andar não desce nem sobe para o andar do jogador enquanto está longe: segue pelo
+// próprio andar, acompanhando o jogador, e só entra no andar dele quando chega bem perto (enemy.engage, de 55 a 95). Assim quem fica atirando
+// numa linha só não acerta quem vem por cima ou por baixo. Quem está no andar do jogador, ainda longe e na mira dele, sai dele (dodgeFireLine).
 const maxPerLevel = 5
 const crowdAtPlayerLevel = (enemy) => enemies.filter((e) => e !== enemy && e.hp > 0 && e.kind === 'melee' && Math.abs(e.y - player.levelY) < 30).length
 function meleeNav(enemy) {
   const diff = player.levelY - enemy.y
   if (Math.abs(diff) < 30) return null
+  if (onTruck && Math.abs(player.x - enemy.x) > enemy.engage) {
+    // longe: fica no andar em que está e se aproxima por ele; na ponta do andar para (patrulha) em vez de cair
+    const here = platforms.find(([x, y, w]) => Math.abs(y - enemy.y) < 2 && enemy.x >= x - 6 && enemy.x <= x + w + 6)
+    const toward = Math.sign(player.x - enemy.x) || 1
+    if (here && ((toward > 0 ? here[0] + here[2] - 16 : here[0] + 16) - enemy.x) * toward <= 0) return { hold: true }
+    return null
+  }
   if (onTruck && crowdAtPlayerLevel(enemy) >= maxPerLevel) return { hold: true }
   if (diff < 0) {
     let best = null
@@ -2447,6 +2457,19 @@ function meleeNav(enemy) {
   return { x: edge + (Math.sign(edge - enemy.x) || 1) * 14, jump: false }
 }
 
+// Sai da linha de tiro: desce (atravessando o piso) ou sobe para o andar de cima, se der. Devolve true se saiu.
+function dodgeFireLine(enemy) {
+  const options = []
+  if (hasFloorBelow(enemy)) options.push('down')
+  if (platforms.some(([x, y, w]) => y < enemy.y - 8 && enemy.y - y <= 52 && enemy.x > x + 10 && enemy.x < x + w - 10)) options.push('up')
+  if (!options.length) return false
+  if (options[Math.floor(Math.random() * options.length)] === 'down') dropDown(enemy, 130)
+  else enemy.vy = -292
+  enemy.dodgeWait = 2.2
+  enemy.jumpWait = .8
+  return true
+}
+
 // Inimigo corpo a corpo (Fofão). Devolve true no quadro em que a faca acerta o Edu.
 function updateMelee(enemy, distance, config, dt) {
   const dir = Math.sign(distance) || enemy.face
@@ -2454,6 +2477,7 @@ function updateMelee(enemy, distance, config, dt) {
   const reach = (config.strike + 8) * charScale
   enemy.cooldown = Math.max(0, enemy.cooldown - dt)
   enemy.jumpWait = Math.max(0, enemy.jumpWait - dt)
+  enemy.dodgeWait = Math.max(0, (enemy.dodgeWait || 0) - dt)
   let struck = false
   enemy.aliveTime += dt
   if (enemy.special) {
@@ -2530,7 +2554,11 @@ function updateMelee(enemy, distance, config, dt) {
     target += crowd * (nav ? 20 : 130)   // na rota quase não se empurram: senão travam na ponta da plataforma, empurrando um ao outro
     if (Math.abs(target) < 35) target = 35 * (Math.sign(target) || enemy.paceDir)   // nunca fica parado
     enemy.vx += clamp(target - enemy.vx, -1100*dt, 1100*dt)
-    if (tryFofaoSpecial(enemy, distance, sameLevel, dt) || tryChapolimLeap(enemy, dt)) {
+    const aimedAt = onTruck && Math.abs(player.levelY - enemy.y) < 30 && Math.abs(distance) > enemy.engage + 20 &&
+      (player.trigger || player.cooldown > .04) && Math.sign(enemy.x - player.x) === player.face
+    if (aimedAt && enemy.dodgeWait <= 0 && enemy.jumpWait <= 0 && Math.random() < dt * 2.5 && dodgeFireLine(enemy)) {
+      // saiu da mira (ver dodgeFireLine)
+    } else if (tryFofaoSpecial(enemy, distance, sameLevel, dt) || tryChapolimLeap(enemy, dt)) {
       // investida especial (rara): ver stepFofaoSpecial
     } else if (sameLevel && Math.abs(distance) < reach*.8 && enemy.cooldown <= 0) {
       enemy.attackAge = 0
