@@ -1,9 +1,9 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
-import { sfx } from './sfx.js'
-import { createGameFx } from './gamefx.js?v=6'
+import { sfx } from './sfx.js?v=2'
+import { createGameFx } from './gamefx.js?v=7'
 import { applySpriteConfig } from './spriteconfig.js'
 import { fase2 } from './fase2.js?v=3'
-import { fase21 } from './fase21.js'
+import { fase21 } from './fase21.js?v=2'
 import { createMidiPlayer } from './midiplayer.js'
 
 // Troca de fase SEM recarregar a página (recarregar tira o navegador da tela cheia): a instância atual é encerrada
@@ -370,9 +370,10 @@ let finish = false
 let roadPos = 0, roadSpeed = onTruck ? fase21.speed : 0, wheelAngle = 0
 // Fase 2.1: o tempo vai fechando a cada onda (0 = entardecer limpo, 1 = tudo escuro, dessaturado e com chuva forte)
 let weather = 0, rainAmount = 0
-// Por onda (índice = onda atual, de 0 a 6): quanto o céu escurece e quanto chove. A chuva começa fraca na onda 2, chega ao ápice na 5 e vai acabando na 6.
-const weatherByWave = [0, .1, .3, .5, .75, 1, .55]
-const rainByWave = [0, 0, .25, .5, .75, 1, 0]
+// Por onda (índice = onda atual, de 0 a 6): quanto o céu escurece e quanto chove. A chuva só começa na onda 3 (fraca), chega ao ápice na 5 e acaba na 6.
+// O céu escurece pouco (mesmo no ápice a cena continua clara e legível): ver drawWeatherGrade.
+const weatherByWave = [0, 0, 0, .3, .55, .8, .35]
+const rainByWave = [0, 0, 0, .3, .65, 1, 0]
 let endSeq = null, endGround = null
 let previewPlaying = true
 let previewSequence = 'run'
@@ -387,6 +388,7 @@ const startX = onTruck ? fase21.startX : 70
 // Todo o estado de cada um fica no próprio objeto. "player" é o jogador da vez: o laço de atualização o troca para cada jogador e a IA
 // dos inimigos o aponta para o jogador mais próximo, então o código antigo (que lê "player") continua valendo sem reescrever.
 const testHost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || new URLSearchParams(location.search).has('debug')
+document.body.classList.toggle('hud-bottom', onTruck)   // Fase 2.1: retratos e vidas embaixo (P1 à esquerda, P2 à direita)
 document.querySelector('#menu')?.classList.toggle('player-mode', !testHost)   // MODO JOGADOR: pausa enxuta na versão publicada
 const twoPlayers = new URLSearchParams(location.search).get('jogadores') === '2'
 const makePlayer = (idx) => ({
@@ -758,8 +760,44 @@ function resetWaves() {
   waveState.pending.length = 0
   waveState.clearedAt = null
   afterimages.length = 0
+  storm.timer = 6; storm.strike = null; storm.flash = 0
   fofaoSpecialReadyAt = elapsed + 9   // o 1º especial só depois de 9 s de fase (fofaoSpecial.firstAt)
   if (onTruck) progressText.textContent = 'ONDA 0 / ' + fase21.waves.length
+}
+// Tempestade (Fase 2.1, enquanto chove: ondas 3 a 5): de vez em quando, sem hora marcada, um raio cai sobre quem está no andar mais alto (o teto
+// do trailer). O símbolo no chão carrega por .76 s (dá tempo de sair dele) e então o raio cai; só conta enquanto alguém está lá em cima, e
+// quem acabou de subir tem uns 3,5 s de folga. Quem desce de andar fica a salvo.
+const storm = { timer: 6, strike: null, flash: 0 }
+const stormStrike = { warn: .76, radius: 20 }
+const roofLevel = () => fase21.level.roof
+const onRoof = (p) => p.grounded && Math.abs(p.y - roofLevel()) < 3
+function updateStorm(dt) {
+  storm.flash = Math.max(0, storm.flash - dt * 3.2)
+  const st = storm.strike
+  if (st) {
+    st.t += dt
+    if (!st.hit && st.t >= stormStrike.warn) {
+      st.hit = true
+      storm.flash = 1
+      sfx.play('thunder')
+      const was = player
+      for (const p of alivePlayers()) {
+        if (Math.abs(p.levelY - roofLevel()) < 3 && p.y <= roofLevel() + 4 && Math.abs(p.x - st.x) < stormStrike.radius) { player = p; hitPlayer() }
+      }
+      player = was
+    }
+    if (st.t > 3) storm.strike = null
+    return
+  }
+  if (finish || endSeq || rainAmount < .25 || rainByWave[Math.min(waveState.index, rainByWave.length - 1)] <= 0) return
+  const roofers = alivePlayers().filter(onRoof)
+  if (!roofers.length) { storm.timer = Math.max(storm.timer, 3.5); return }
+  if ((storm.timer -= dt) > 0) return
+  const target = roofers[Math.floor(Math.random() * roofers.length)]
+  storm.strike = { x: target.x, floor: target.y, t: 0, hit: false }
+  gameFx.lightning({ x: target.x, floor: target.y })
+  sfx.play('bossShot', { volume: .6 })   // o carregamento do raio
+  storm.timer = (8 + Math.random() * 10) * (1.25 - rainAmount * .5)   // esporádico: de 6 a 22 s; mais seguido quanto mais forte a chuva
 }
 resetWaves()
 function spawnWaveEnemy({ type, level, side }) {
@@ -819,7 +857,16 @@ function updateWaves(dt) {
   progressText.textContent = 'ONDA ' + w.index + ' / ' + waves.length
   announce(wave.name, 1.6)
   w.clearedAt = null
-  for (const spec of [...wave.spawns].sort((a, b) => a.t - b.t)) w.pending.push({ at: elapsed + 1.6 + spec.t, spec })
+  const specs = [...wave.spawns]
+  // com 2 jogadores cada onda traz mais inimigos: metade a mais (arredondando para cima), repetindo os tipos e andares da própria onda, um pouco depois
+  if (players.length > 1) {
+    const copies = Math.ceil(wave.spawns.length / 2)
+    for (let i = 0; i < copies; i++) {
+      const base = wave.spawns[(i * 2 + 1) % wave.spawns.length]
+      specs.push({ ...base, t: base.t + .9 + Math.random() * .8 })
+    }
+  }
+  for (const spec of specs.sort((a, b) => a.t - b.t)) w.pending.push({ at: elapsed + 1.6 + spec.t, spec })
 }
 
 // Fase 2.1: final. A carreta freia (a rua desacelera) até parar com a porta do Vikings Pub; o Edu corre para a frente da carreta e
@@ -1661,6 +1708,7 @@ function update(dt) {
     const rainTarget = rainByWave[wi]
     rainAmount += (rainTarget - rainAmount) * Math.min(1, dt * (rainTarget > rainAmount ? .4 : .22))   // sobe em uns 5-8 s e some mais devagar ainda
     gameFx.updateRain(dt)
+    if (!endSeq) updateStorm(dt)
     roadPos += roadSpeed * dt
     wheelAngle += roadSpeed / fase21.speed * fase21.wheelSpin * dt
     updateSuspension(dt)
@@ -1813,6 +1861,11 @@ function stepPlayer(dt, pad, scripted, convoyActive) {
   player.jumpPressed = false
   player.buffer -= dt
   player.coyote = player.grounded ? 0.09 : player.coyote - dt
+  // Fase 2.1: agachado + pulo = desce para o andar de baixo (atravessa o piso)
+  if (onTruck && !scripted && player.grounded && !player.mover && wantsCrouch && player.buffer > 0 && hasFloorBelow(player)) {
+    dropDown(player, 40)
+    sfx.play('checkpoint', { volume: .12 })
+  }
   if (player.buffer > 0 && player.coyote > 0) {
     player.vy = -jumpSpeed
     player.grounded = false
@@ -2123,10 +2176,21 @@ function completePlayerFall() {
   else { reset(false); bossHud.hidden = true }
 }
 
+// Descer de andar (só na Fase 2.1): quem "salta para baixo" atravessa o piso em que está (actor.dropY) e cai até o andar de baixo.
+// Os pisos do andar de onde saiu (dropY ou mais altos) deixam de valer até ele passar 12 de altura por baixo deles.
+const hasFloorBelow = (actor) => platforms.some(([x, y, w]) => y > actor.y + 6 && actor.x + 4 > x && actor.x - 4 < x + w)
+function dropDown(actor, hop = 0) {
+  actor.dropY = actor.y
+  actor.grounded = false
+  actor.vy = -hop
+  if ('coyote' in actor) { actor.coyote = 0; actor.buffer = 0 }
+}
 function landOnPlatform(actor, previousY, radius, withMovers = false) {
   if (withMovers) actor.mover = null
+  if (actor.dropY != null && actor.y > actor.dropY + 12) actor.dropY = null
   if (actor.vy < 0) return
   for (const [x,y,w] of platforms) {
+    if (actor.dropY != null && y <= actor.dropY + 1) continue
     if (actor.x + radius <= x || actor.x - radius >= x+w || previousY > y || actor.y < y) continue
     actor.y = y
     actor.vy = 0
@@ -2216,16 +2280,19 @@ const fofaoSpecial = {
   dashSpeed: 560, dashMax: .4,
   recover: .75
 }
+// Na ONDA FINAL da Fase 2.1 os inimigos usam o especial bem mais: logo depois de entrar, mais vezes cada um, com intervalo curto entre eles e mais chance por segundo.
+const finalWave = () => onTruck && waveState.index >= fase21.waves.length
+const specialRules = () => finalWave() ? { maxUses: 4, minAlive: 1.5, gap: 4.5, chance: 3 } : { maxUses: fofaoSpecial.maxUses, minAlive: fofaoSpecial.minAlive, gap: fofaoSpecial.gap, chance: 1 }
 function tryFofaoSpecial(enemy, distance, sameLevel, dt) {
-  const sp = fofaoSpecial
+  const sp = fofaoSpecial, rules = specialRules()
   const far = Math.abs(distance)
-  if (enemy.type !== 'fofao' || enemy.specialUses >= sp.maxUses || enemy.aliveTime < sp.minAlive || elapsed < fofaoSpecialReadyAt) return false
-  if (!sameLevel || far < sp.minDist || far > sp.maxDist || Math.random() > sp.chance * dt) return false
+  if (enemy.type !== 'fofao' || enemy.specialUses >= rules.maxUses || enemy.aliveTime < rules.minAlive || elapsed < fofaoSpecialReadyAt) return false
+  if (!sameLevel || far < sp.minDist || far > sp.maxDist || Math.random() > sp.chance * rules.chance * dt) return false
   enemy.special = 'crouch'
   enemy.specialAge = 0
   enemy.specialUses++
   enemy.face = Math.sign(distance) || enemy.face
-  fofaoSpecialReadyAt = elapsed + sp.gap
+  fofaoSpecialReadyAt = elapsed + rules.gap
   sfx.play('bossShot', { dx: enemy.x - player.x })
   return true
 }
@@ -2276,15 +2343,15 @@ const chapolimLeap = { minAlive: 6, maxUses: 2, chance: .3, coil: .35, rise: .5,
   height: 330, reach: 90, jumpClear: 20 }
 const slamFront = (age) => 7 + (chapolimLeap.reach - 7) * (1 - Math.pow(1 - Math.min(1, Math.max(0, age - .015) / .6), 3))
 function tryChapolimLeap(enemy, dt) {
-  const L = chapolimLeap
-  if (enemy.type !== 'chapolim' || !enemy.grounded || enemy.specialUses >= L.maxUses || enemy.aliveTime < L.minAlive ||
-      elapsed < fofaoSpecialReadyAt || Math.random() > L.chance * dt) return false
+  const L = chapolimLeap, rules = specialRules()
+  if (enemy.type !== 'chapolim' || !enemy.grounded || enemy.specialUses >= rules.maxUses || enemy.aliveTime < rules.minAlive ||
+      elapsed < fofaoSpecialReadyAt || Math.random() > L.chance * rules.chance * dt) return false
   enemy.special = 'coil'
   enemy.specialAge = 0
   enemy.specialUses++
   enemy.vx = 0
   enemy.face = Math.sign(player.x - enemy.x) || enemy.face
-  fofaoSpecialReadyAt = elapsed + fofaoSpecial.gap
+  fofaoSpecialReadyAt = elapsed + rules.gap
   sfx.play('bossShot', { dx: enemy.x - player.x })
   return true
 }
@@ -2349,6 +2416,7 @@ function meleeNav(enemy) {
   }
   const here = platforms.find(([x, y, w]) => Math.abs(y - enemy.y) < 2 && enemy.x >= x - 6 && enemy.x <= x + w + 6)   // folga: na ponta ele ainda se apoia pelo raio do corpo
   if (!here) return null
+  if (onTruck && hasFloorBelow(enemy)) return { x: enemy.x, jump: false, drop: true }   // na carreta ele desce pulando, sem ir até a ponta do andar
   const edges = [here[0], here[0] + here[2]].filter(e => e > 0 && e < 700)
   if (!edges.length) return null
   const edge = edges.reduce((a, b) => Math.abs(b - enemy.x) < Math.abs(a - enemy.x) ? b : a)
@@ -2415,6 +2483,7 @@ function updateMelee(enemy, distance, config, dt) {
       const toNav = nav.x - enemy.x
       target = Math.abs(toNav) > 4 ? Math.sign(toNav) * config.speed : dir * 30
       if (nav.jump && enemy.jumpWait <= 0) { enemy.vy = -292; enemy.jumpWait = .8 }
+      else if (nav.drop && enemy.jumpWait <= 0 && Math.random() < dt * 4) { dropDown(enemy, 130); enemy.jumpWait = .8 }   // salta para baixo, atravessando o piso
     }
     // sem empilhar: cada Fofão se afasta de quem está colado nele (podem se cruzar, mas não ficam no mesmo ponto)
     let crowd = 0
@@ -2512,9 +2581,11 @@ function startHeliOrder() {
   h.wave++
   h.phase = 'order'
   h.t = 0
+  // com 2 jogadores cada lado manda mais um soldado (um elite nas últimas ondas)
+  const extra = players.length > 1 ? [h.wave >= 3 ? 'elite' : 'patrol'] : []
   h.pending = [
-    ...wave.left.map((type, i) => ({ at: .6 + i * .9, side: 'left', type })),
-    ...wave.right.map((type, i) => ({ at: 2.1 + i * .9, side: 'right', type }))
+    ...[...wave.left, ...extra].map((type, i) => ({ at: .6 + i * .9, side: 'left', type })),
+    ...[...wave.right, ...extra].map((type, i) => ({ at: 2.1 + i * .9, side: 'right', type }))
   ].sort((a, b) => a.at - b.at)
   sfx.play('bossShot', { dx: 0 })
 }
@@ -3371,12 +3442,12 @@ function heroAtlas(context,sheet,index,x,y,scale) {
 function drawWeatherGrade() {
   ctx.save()
   ctx.globalCompositeOperation = 'saturation'
-  ctx.globalAlpha = weather * .75
+  ctx.globalAlpha = weather * .5
   ctx.fillStyle = '#808080'
   ctx.fillRect(0, 0, width, height)
   ctx.globalCompositeOperation = 'multiply'
-  ctx.globalAlpha = weather * .8
-  ctx.fillStyle = '#6b7088'
+  ctx.globalAlpha = weather * .5
+  ctx.fillStyle = '#9aa0b8'
   ctx.fillRect(0, 0, width, height)
   ctx.restore()
 }
@@ -3387,6 +3458,7 @@ function render() {
   if (onTruck) {   // o tempo fecha e a chuva cai por cima de tudo
     if (weather > .02) drawWeatherGrade()
     gameFx.drawRain(ctx, rainAmount)
+    if (storm.flash > .01) { ctx.save(); ctx.globalAlpha = storm.flash * .45; ctx.fillStyle = '#dfe8ff'; ctx.fillRect(0, 0, width, height); ctx.restore() }   // clarão do raio
   }
   if ((endSeq && endSeq.wiped) || (outSeq && outSeq.wiped)) {   // a tela fecha: vidro por cima; quando ele estoura, por baixo só há escuro
     if (gameFx.wipeTime > 1.5) { ctx.fillStyle = '#050408'; ctx.fillRect(0,0,width,height) }
@@ -3827,6 +3899,8 @@ Promise.all([
       get lives() { return players[0].lives }, set lives(v) { for (const p of players) p.lives = v },
       get weather() { return weather }, set weather(v) { weather = v },
       get rain() { return rainAmount },
+      get storm() { return storm }, get waveIndex() { return waveState.index },
+      setWave(i) { waveState.index = i; rainAmount = rainByWave[Math.min(i, rainByWave.length - 1)]; weather = weatherByWave[Math.min(i, weatherByWave.length - 1)] },
       get god() { return players[0].inv > 1e5 }, set god(v) { for (const p of players) p.inv = v ? 1e9 : 0 },
       set rearTimer(v) { rearTimer = v },
       warp(x) { respawnX = x; reset(false); respawnX = Math.max(...[70, ...checkpoints].filter(c => c <= x)) }

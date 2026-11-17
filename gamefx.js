@@ -22,6 +22,7 @@ import * as bigExplosion from './vendor/pixelfx/src/fx/explosions/big-explosion.
 import * as rain from './vendor/pixelfx/src/fx/weather/rain.js?v=2'
 import * as campfire from './vendor/pixelfx/src/fx/fire/campfire.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
+import * as lightningStrike from './vendor/pixelfx/src/fx/lightning/lightning-strike.js'
 
 const maxOneShots = 28
 // medalha dourada em vez do rosa original do efeito
@@ -170,6 +171,12 @@ export function createGameFx(width, height) {
     /** Golpe crítico (crit-hit) onde o ataque acertou: x, chão do alvo e altura do peito. */
     crit({ x, floor, flip, height = 28 }) {
       oneShots.push(createFx(critHit, { x, y: floor, flip, seed: seed(), height }))
+      if (oneShots.length > maxOneShots) oneShots.shift()
+    },
+    /** Raio da tempestade (lightning-strike do pixelfx) caindo em x, na altura do chão floor: o símbolo no chão carrega (aviso) por
+     .76 s, então o raio cai (e mais duas vezes, piscando) e o canal se desfaz. Dura uns 3 s. */
+    lightning({ x, floor }) {
+      oneShots.push(createFx(lightningStrike, { x, y: floor, seed: seed() }))
       if (oneShots.length > maxOneShots) oneShots.shift()
     },
     /** Estouro ao pegar um item, centrado em x,y. */

@@ -310,3 +310,7 @@ html.booting,html.screen-loading{cursor:progress}
 #loader.failed .loader-text{color:#ff9a9a}
 @keyframes loader-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.loader-spin{animation-duration:2.4s}}
+
+/* Fase 2.1 (carreta): retratos e vidas embaixo, o P1 no canto esquerdo e o P2 no direito (espelhado: retrato no canto, vidas para dentro) */
+body.hud-bottom .player-hud{top:auto;bottom:var(--hud-inset);left:var(--hud-inset);right:auto}
+body.hud-bottom .player-hud.p2{left:auto;right:var(--hud-inset);flex-direction:row-reverse}

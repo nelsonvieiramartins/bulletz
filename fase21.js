@@ -23,12 +23,12 @@ const bounds = [22, 660]             // onde o Edu pode andar: do fundo da trase
 const S = (type, lvl, t = 0) => ({ type, level: lvl, side: 'left', t })
 const D = (type, y, side, t = 0) => ({ type, level: y, side, t })
 const waves = [
-  { name: 'ONDA 1', spawns: [S('fofao','low',0), S('fofao','low',1.6), S('chapolim','low',3.2)] },
-  { name: 'ONDA 2', spawns: [S('fofao','low',0), S('chapolim','upper',1), S('fofao','low',2.4), S('fofao','low',4.5)] },
-  { name: 'ONDA 3', spawns: [S('chapolim','low',0), S('fofao','low',1), S('fofao','upper',1.8), S('chapolim','roof',2.6), S('fofao','upper',5)] },
-  { name: 'ONDA 4', spawns: [S('fofao','roof',0), S('chapolim','low',.6), S('fofao','upper',1.2), S('fofao','low',2.2), S('chapolim','upper',3.2)] },
-  { name: 'ONDA 5', spawns: [S('chapolim','upper',0), S('fofao','low',.8), S('chapolim','low',1.6), S('fofao','upper',2.8), S('fofao','roof',3.4)] },
-  { name: 'ONDA FINAL', spawns: [S('chapolim','low',0), S('fofao','upper',.8), S('fofao','roof',1.6), S('chapolim','low',2.2), S('fofao','upper',3), S('fofao','low',3.8), S('chapolim','roof',4.6)] }
+  { name: 'ONDA 1', spawns: [S('fofao','low',0), S('fofao','low',1.4), S('chapolim','low',2.8), S('fofao','upper',3.6)] },
+  { name: 'ONDA 2', spawns: [S('fofao','low',0), S('chapolim','upper',.8), S('fofao','low',1.8), S('fofao','upper',2.6), S('chapolim','low',3.8), S('fofao','low',5)] },
+  { name: 'ONDA 3', spawns: [S('chapolim','low',0), S('fofao','low',.8), S('fofao','upper',1.6), S('chapolim','roof',2.4), S('fofao','upper',3.4), S('fofao','roof',4.4), S('chapolim','low',5.5)] },
+  { name: 'ONDA 4', spawns: [S('fofao','roof',0), S('chapolim','low',.6), S('fofao','upper',1.2), S('fofao','low',2), S('chapolim','upper',2.8), S('fofao','roof',3.6), S('chapolim','roof',4.6), S('fofao','low',5.5)] },
+  { name: 'ONDA 5', spawns: [S('chapolim','upper',0), S('fofao','low',.6), S('chapolim','low',1.4), S('fofao','upper',2.2), S('fofao','roof',3), S('chapolim','roof',3.8), S('fofao','upper',4.6), S('fofao','low',5.4), S('chapolim','upper',6.2)] },
+  { name: 'ONDA FINAL', spawns: [S('chapolim','low',0), S('fofao','upper',.7), S('fofao','roof',1.4), S('chapolim','low',2), S('fofao','upper',2.7), S('fofao','low',3.4), S('chapolim','roof',4.1), S('fofao','roof',4.8), S('fofao','upper',5.5), S('chapolim','upper',6.2), S('fofao','low',6.9), S('fofao','roof',7.6), S('chapolim','low',8.3)] }
 ]
 
 export const fase21 = {

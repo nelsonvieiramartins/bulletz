@@ -11,6 +11,7 @@ const sounds = {
   droneBlast:   { file: 'explosion_small',     volume: .6,  pitch: .06 },
   heavyBlast:   { file: 'explosion_crunch',    volume: .7,  pitch: .04 },
   bossDown:     { file: 'explosion_big',       volume: .85 },
+  thunder:      { file: 'thunder',             volume: .85, pitch: .05 },   // trovão da Fase 2.1 (sintetizado para o jogo)
   patrolShot:   { file: 'laser_pew',           volume: .3,  pitch: .06, gap: .08 },
   droneShot:    { file: 'laser_blaster',       volume: .3,  pitch: .06, gap: .08 },
   bossShot:     { file: 'laser_charged',       volume: .42, pitch: .03, gap: .12 },
