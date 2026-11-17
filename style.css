@@ -295,4 +295,4 @@ body[data-mode=title] .player-hud.p2,body[data-mode=select] .player-hud.p2{opaci
 .menu.player-mode .menu-section.menu-audio{border-top:1px solid var(--line);margin:0;padding:16px 0 0}
 .menu.player-mode .menu-audio .music-row{margin:0;gap:12px 14px}
 #menu.player-mode .menu-actions button,#menu.player-mode .menu-actions button:focus,#menu.player-mode .menu-actions button:focus-visible,#menu.player-mode .menu-actions button:hover{outline:none!important;box-shadow:none!important;border:0!important;border-radius:0}
-#menu.player-mode #resume.sel,#menu.player-mode #exit-menu.sel,#menu.player-mode #resume:focus-visible,#menu.player-mode #exit-menu:focus-visible,#menu.player-mode #resume:hover,#menu.player-mode #exit-menu:hover{filter:drop-shadow(0 0 3px #fff7) drop-shadow(0 0 14px #ffb35ccc) brightness(1.1);transform:scale(1.05)}
+#menu.player-mode #resume:hover,#menu.player-mode #exit-menu:hover{filter:brightness(1.1)}   /* o selecionado ganha o contorno no formato da arte (#menu-cursor.shape) */

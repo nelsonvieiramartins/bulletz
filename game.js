@@ -1981,16 +1981,18 @@ function updateMenuCursor() {
   // no fim de jogo o contorno fica ATRÁS dos botões (dentro da tela de fim de jogo), para não cobrir o selo ×3; no menu de pausa fica por cima
   const host = key === 'gameover' ? gameOverScreen : document.querySelector('.screen')
   if (menuCursor.parentElement !== host) host.insertBefore(menuCursor, host.firstChild)
-  const art = ['iniciar', 'continuar', 'reiniciar'].find((n) => items[menuSel].classList.contains('art-' + n))
+  const pauseArt = document.querySelector('#menu').classList.contains('player-mode') && { resume: 'botao-continuar', 'exit-menu': 'botao-sair' }[items[menuSel].id]   // MODO JOGADOR: CONTINUAR e SAIR em arte (520×140)
+  const art = pauseArt || ['iniciar', 'continuar', 'reiniciar'].find((n) => items[menuSel].classList.contains('art-' + n))
   menuCursor.classList.toggle('shape', !!art)
   if (art) {
     // botões com arte: o contorno acompanha o formato do sprite (assets/botoes/*-contorno.png: a silhueta do botão dilatada, 16 px de folga em volta)
-    const kx = r.width / 410, ky = r.height / 174
+    const [aw, ah] = pauseArt ? [520, 140] : [410, 174]
+    const kx = r.width / aw, ky = r.height / ah
     menuCursor.style.backgroundImage = `url(assets/botoes/${art}-contorno.png?v=3)`
     menuCursor.style.left = Math.round(r.left - s.left - 16 * kx) + 'px'
     menuCursor.style.top = Math.round(r.top - s.top - 16 * ky) + 'px'
-    menuCursor.style.width = Math.round(442 * kx) + 'px'
-    menuCursor.style.height = Math.round(206 * ky) + 'px'
+    menuCursor.style.width = Math.round((aw + 32) * kx) + 'px'
+    menuCursor.style.height = Math.round((ah + 32) * ky) + 'px'
   } else {   // botões comuns do menu: moldura retangular
     const pad = 2
     menuCursor.style.backgroundImage = ''
