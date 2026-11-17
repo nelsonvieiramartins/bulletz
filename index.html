@@ -13,8 +13,8 @@
 <title>BULLETZ — Divorced Dad Rock</title>
 <script>try{if(localStorage.getItem('bulletz.modoCelular')==='1'&&['localhost','127.0.0.1','[::1]'].indexOf(location.hostname)>=0)document.documentElement.classList.add('modo-celular')}catch(e){}</script>
 <script>try{if(sessionStorage.getItem('bulletz.autostart'))document.documentElement.classList.add('stage-loading');setTimeout(function(){document.documentElement.classList.remove('stage-loading')},10000)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=50">
-<script type="module" src="game.js?v=224"></script>
+<link rel="stylesheet" href="style.css?v=51">
+<script type="module" src="game.js?v=225"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -58,11 +58,11 @@
         <button type="button" class="select-card players-card" data-n="1" role="radio" aria-checked="false"><img src="assets/selecionar/jogadores-1.png" loading="lazy" alt="P1 — 1 jogador"></button>
         <button type="button" class="select-card players-card" data-n="2" role="radio" aria-checked="false"><img src="assets/selecionar/jogadores-2.png" loading="lazy" alt="P1 - P2 — 2 jogadores"></button>
       </div>
-      <p class="title-hint select-hint">← → ESCOLHER · ENTER CONFIRMA · ESC VOLTA</p>
+      <button type="button" class="select-go" aria-label="Iniciar"><img src="assets/selecionar/iniciar.png" loading="lazy" alt="INICIAR"></button>
     </section>
 
     <section id="select-screen" class="overlay select-screen" aria-label="Selecionar player" hidden>
-      <img class="select-title" src="assets/selecionar/titulo.png" loading="lazy" alt="SELECIONAR PLAYER">
+      <img class="select-title" src="assets/selecionar/escolher-musico.png" loading="lazy" alt="ESCOLHER MÚSICO">
       <div class="select-cards" role="radiogroup" aria-label="Personagem">
         <button type="button" class="select-card" data-char="edu" role="radio" aria-checked="false">
           <span class="card-tags"><span class="card-tag p1">P1</span><span class="card-tag p2">P2</span></span>
@@ -75,7 +75,7 @@
           <span class="card-name">OPERADOR</span>
         </button>
       </div>
-      <p class="title-hint select-hint">← → ESCOLHER · ENTER CONFIRMA</p>
+      <button type="button" class="select-go" aria-label="Iniciar"><img src="assets/selecionar/iniciar.png" loading="lazy" alt="INICIAR"></button>
     </section>
 
     <section id="title-screen" class="overlay title-screen" aria-label="Tela inicial">

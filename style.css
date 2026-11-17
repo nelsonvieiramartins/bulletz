@@ -262,3 +262,6 @@ body[data-mode=title] .player-hud.p2,body[data-mode=select] .player-hud.p2{opaci
 .players-card{width:clamp(110px,22cqw,300px)}
 .players-card img{display:block;width:100%;height:auto}
 .players-screen .select-title{width:min(52cqw,720px)}
+.select-go{margin-top:clamp(8px,1.8cqw,24px);padding:0;border:0;background:none;cursor:pointer;width:clamp(120px,19cqw,260px);filter:drop-shadow(0 0 12px #ff9a3c88);transition:transform .15s,filter .15s}
+.select-go img{display:block;width:100%;height:auto}
+.select-go:hover,.select-go:focus-visible{outline:none;transform:scale(1.06);filter:drop-shadow(0 0 18px #ffb35ccc)}

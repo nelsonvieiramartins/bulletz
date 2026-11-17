@@ -1438,6 +1438,7 @@ function confirmPlayers() {
   try { sessionStorage.setItem('bulletz.afterPlayers', '1') } catch {}
   location.href = u.href
 }
+playersScreen.querySelector('.select-go').addEventListener('click', () => { if (mode === 'players') confirmPlayers() })
 playersCards.forEach((card, i) => {
   card.addEventListener('mouseover', () => { if (mode === 'players' && playersSel !== i) { playersSel = i; renderPlayers() } })
   card.addEventListener('click', () => { if (mode !== 'players') return; playersSel = i; confirmPlayers() })
@@ -1489,6 +1490,7 @@ function confirmSelect() {
   if (selectReturn === 'play') { selectDone = true; setMode('title'); beginPlay() }
   else setMode('title')
 }
+selectScreen.querySelector('.select-go').addEventListener('click', () => { if (mode === 'select') confirmSelect() })
 selectCards.forEach((card, i) => {
   card.addEventListener('mouseover', () => { if (mode === 'select' && selPhase === 0 && chosenP1 !== i) { chosenP1 = i; renderSelect() } })
   card.addEventListener('click', () => {
