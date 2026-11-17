@@ -25,7 +25,7 @@ export function draw(p, t, o) {
   cycle(t, D, 120, S, (g) => g.range(0.32, 0.65), (age, life, r) => {
     if (r.next() > dens) return;
     const fwd = r.next() < 0.22;
-    const vx = fwd ? r.range(35, 110) : -r.range(50, 240), vy = -(fwd ? r.range(35, 100) : r.range(80, 235));
+    const vx = fwd ? r.range(35, 110) : -r.range(50, 240), vy = -(fwd ? r.range(30, 80) : r.range(55, 150));   // baixo: o respingo fica na base do pneu
     const x = r.range(-3, 3) + vx * age, y = r.range(-2, 0) + vy * age + 0.5 * G * age * age, k = age / life;
     if (y > 1 || (k > 0.8 && r.next() < (k - 0.8) * 4)) return;
     const big = r.next();

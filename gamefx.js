@@ -23,7 +23,7 @@ import * as rain from './vendor/pixelfx/src/fx/weather/rain.js?v=2'
 import * as campfire from './vendor/pixelfx/src/fx/fire/campfire.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 import * as lightningStrike from './vendor/pixelfx/src/fx/lightning/lightning-strike.js'
-import * as wheelSpray from './effects/respingo-roda.js?v=2'   // respingo das rodas sobre a água
+import * as wheelSpray from './effects/respingo-roda.js?v=3'   // respingo das rodas sobre a água
 import * as rainSplash from './effects/alagado.js'   // cópia do rain-splash do pixelfx, sem o reflexo do poste
 
 const maxOneShots = 28

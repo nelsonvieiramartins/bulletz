@@ -1,6 +1,6 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js?v=2'
-import { createGameFx } from './gamefx.js?v=12'
+import { createGameFx } from './gamefx.js?v=14'
 import { applySpriteConfig } from './spriteconfig.js?v=2'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js?v=2'
@@ -3707,7 +3707,7 @@ function drawTruckWheels() {
   const left = Math.round(truck.x - camera * truck.factor), top = truck.y - h
   drawWheelsAt(left, top, wheelAngle)
   // respingo sobre a água: sai do chão sob o lado de trás de cada roda, mais forte quanto mais chove e mais rápido a carreta anda
-  const spots = fase21.wheels.map((wheel) => ({ x: left + (wheel.cx + .5) / pixelScale - 5, y: top + (wheel.cy + .5) / pixelScale + wheel.size / pixelScale / 2 - 1 }))
+  const spots = fase21.wheels.map((wheel) => ({ x: left + (wheel.cx + .5) / pixelScale - 3, y: top + h - 3 }))   // base do pneu: o fundo da arte da carreta, onde a borracha toca a água
   gameFx.drawSpray(ctx, rainAmount * Math.min(1, roadSpeed / fase21.speed), spots)
 }
 function drawWheelsAt(left, top, angle) {
