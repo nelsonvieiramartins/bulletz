@@ -1,6 +1,6 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js?v=2'
-import { createGameFx } from './gamefx.js?v=7'
+import { createGameFx } from './gamefx.js?v=12'
 import { applySpriteConfig } from './spriteconfig.js'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js?v=2'
@@ -3661,6 +3661,10 @@ function drawStage2Background() {
     for (let i = Math.floor(offset/w), x = i*w-offset; x < width; i++, x += w)
       ctx.drawImage(sprites[sheets[i%sheets.length]],x,y,w,h)
   }
+  if (onTruck) {   // asfalto alagado durante a chuva (atrás da carreta); sob a carreta a água fica parada
+    const truckLeft = Math.round(stage2Props.find(q => q.sheet === 'truck').x - camera)
+    gameFx.drawPuddles(ctx, rainAmount, [truckLeft - 10, truckLeft + 672])
+  }
   if (onTruck && endSeq) drawPub()
   if (onTruck) {   // daqui em diante tudo balança com a carreta; só o cenário ao fundo fica parado
     ctx.save()
@@ -3686,7 +3690,11 @@ function drawStage2Background() {
 function drawTruckWheels() {
   const truck = stage2Props.find(p => p.sheet === 'truck')
   const h = sprites.truck.height / pixelScale
-  drawWheelsAt(Math.round(truck.x - camera * truck.factor), truck.y - h, wheelAngle)
+  const left = Math.round(truck.x - camera * truck.factor), top = truck.y - h
+  drawWheelsAt(left, top, wheelAngle)
+  // respingo sobre a água: sai do chão sob o lado de trás de cada roda, mais forte quanto mais chove e mais rápido a carreta anda
+  const spots = fase21.wheels.map((wheel) => ({ x: left + (wheel.cx + .5) / pixelScale - 5, y: top + (wheel.cy + .5) / pixelScale + wheel.size / pixelScale / 2 - 1 }))
+  gameFx.drawSpray(ctx, rainAmount * Math.min(1, roadSpeed / fase21.speed), spots)
 }
 function drawWheelsAt(left, top, angle) {
   fase21.wheels.forEach((wheel, i) => {
@@ -3921,6 +3929,7 @@ Promise.all([
       get lives() { return players[0].lives }, set lives(v) { for (const p of players) p.lives = v },
       get weather() { return weather }, set weather(v) { weather = v },
       get rain() { return rainAmount },
+      get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
       get storm() { return storm }, get waveIndex() { return waveState.index },
       setWave(i) { waveState.index = i; rainAmount = rainByWave[Math.min(i, rainByWave.length - 1)]; weather = weatherByWave[Math.min(i, weatherByWave.length - 1)] },
       get god() { return players[0].inv > 1e5 }, set god(v) { for (const p of players) p.inv = v ? 1e9 : 0 },

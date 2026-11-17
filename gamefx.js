@@ -23,6 +23,8 @@ import * as rain from './vendor/pixelfx/src/fx/weather/rain.js?v=2'
 import * as campfire from './vendor/pixelfx/src/fx/fire/campfire.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 import * as lightningStrike from './vendor/pixelfx/src/fx/lightning/lightning-strike.js'
+import * as wheelSpray from './effects/respingo-roda.js?v=2'   // respingo das rodas sobre a água
+import * as rainSplash from './effects/alagado.js'   // cópia do rain-splash do pixelfx, sem o reflexo do poste
 
 const maxOneShots = 28
 // medalha dourada em vez do rosa original do efeito
@@ -67,6 +69,28 @@ export function createGameFx(width, height) {
   const rainContext = rainCanvas.getContext('2d')
   const rainImage = rainContext.createImageData(width, height)
   const rainFx = (width > 360 ? [0.25, 0.75] : [0.5]).map((u, i) => createFx(rain, { x: Math.round(width * u), y: height - 8, seed: 4 + i * 7, bare: true, reach: height - 8, density: 1 }))
+  // asfalto alagado (rain-splash do pixelfx, poças com gotas, coroas e anéis): poças bem juntas, uma sobre a outra, para a água cobrir o
+  // asfalto inteiro. A água é cortada reta no meio-fio (puddleTop), então não aparece a borda arredondada das poças. Ficam paradas na tela
+  // (é a rua que passa) e são desenhadas atrás da carreta.
+  const puddleFrame = createFrame(width, height)
+  const puddleCanvas = document.createElement('canvas')
+  puddleCanvas.width = width
+  puddleCanvas.height = height
+  const puddleContext = puddleCanvas.getContext('2d')
+  const puddleImage = puddleContext.createImageData(width, height)
+  const puddleTop = 216    // onde o asfalto começa na tela (o meio-fio fica logo acima)
+  const puddleY = 243      // centro das poças: a borda de trás (centro - 27) cai no meio-fio e a da frente passa da base da tela
+  // respingo das rodas: um efeito por roda (wheelSpray), num quadro à parte do tamanho da tela
+  const sprayFrame = createFrame(width, height)
+  const sprayCanvas = document.createElement('canvas')
+  sprayCanvas.width = width
+  sprayCanvas.height = height
+  const sprayContext = sprayCanvas.getContext('2d')
+  const sprayImage = sprayContext.createImageData(width, height)
+  const sprayFx = Array.from({ length: 4 }, (_, i) => createFx(wheelSpray, { x: 0, y: 0, seed: 5 + i * 11, density: 1 }))
+  const puddleGap = 60
+  let puddleAge = 1, puddleDrawn = false   // as poças redesenham a 30 quadros por segundo (a taxa do efeito): metade do custo
+  const puddleFx = Array.from({ length: Math.ceil(width / puddleGap) + 2 }, (_, i) => createFx(rainSplash, { x: Math.round(i * puddleGap - 20), y: puddleY, seed: 9 + i * 13 }))
   return {
     /** Faísca onde o tiro acertou. x,y = ponto do acerto; floor = pés do alvo; dx = direção do tiro (1 ou -1). */
     hit({ x, y, floor, dx }) {
@@ -216,7 +240,63 @@ export function createGameFx(width, height) {
       }
     },
     /** Anda a chuva. */
-    updateRain(dt) { for (const fx of rainFx) fx.update(dt) },
+    updateRain(dt) { for (const fx of rainFx) fx.update(dt); for (const fx of puddleFx) fx.update(dt); for (const fx of sprayFx) fx.update(dt); puddleAge += dt },
+    /** Desenha o asfalto alagado (já com a escala do jogo). amount = 0 a 1: a mesma força da chuva. */
+    drawPuddles(ctx, amount, calm = null) {
+      if (amount < .08) return
+      if (puddleAge >= 1 / 30 || !puddleDrawn) {
+        puddleAge = 0
+        puddleDrawn = true
+        clearFrame(puddleFrame)
+        for (const fx of puddleFx) fx.draw(puddleFrame, 'back')
+        for (const fx of puddleFx) fx.draw(puddleFrame, 'front')
+        composite(puddleFrame, puddleImage.data, null)
+        puddleContext.putImageData(puddleImage, 0, 0)
+      }
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(0, puddleTop, width, height - puddleTop)
+      ctx.clip()
+      ctx.globalAlpha = Math.min(1, amount * 1.6)
+      if (!calm) ctx.drawImage(puddleCanvas, 0, 0)
+      else {
+        // calm = [x0, x1]: o trecho da tela sob a carreta. Ali a água fica parada (sem gotas, coroas e anéis); fora dele, com tudo
+        const x0 = Math.max(0, calm[0]), x1 = Math.min(width, calm[1])
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, puddleTop, Math.max(0, x0), height - puddleTop)
+        ctx.rect(Math.max(x1, 0), puddleTop, width, height - puddleTop)
+        ctx.clip()
+        ctx.drawImage(puddleCanvas, 0, 0)
+        ctx.restore()
+        if (x1 > x0) {
+          const sheet = ctx.createLinearGradient(0, puddleTop, 0, height)
+          sheet.addColorStop(0, 'rgba(18,48,99,.82)')
+          sheet.addColorStop(1, 'rgba(10,22,48,.94)')
+          ctx.fillStyle = sheet
+          ctx.fillRect(x0, puddleTop, x1 - x0, height - puddleTop)
+        }
+      }
+      ctx.restore()
+    },
+    /** Respingo das rodas sobre a água (já com a escala do jogo). spots = [{ x, y }] com o ponto onde cada roda toca a água, na tela.
+     amount = 0 a 1: a força do respingo (chuva x velocidade da carreta). */
+    drawSpray(ctx, amount, spots) {
+      if (amount < .08) return
+      clearFrame(sprayFrame)
+      spots.forEach((spot, i) => {
+        const fx = sprayFx[i]
+        if (!fx) return
+        fx.options.x = Math.round(spot.x)
+        fx.options.y = Math.round(spot.y)
+        fx.options.density = Math.min(1, .25 + amount * .9)
+        fx.draw(sprayFrame, 'back')
+        fx.draw(sprayFrame, 'front')
+      })
+      composite(sprayFrame, sprayImage.data, null)
+      sprayContext.putImageData(sprayImage, 0, 0)
+      ctx.drawImage(sprayCanvas, 0, 0)
+    },
     /** Desenha a chuva (já com a escala do jogo). amount = 0 a 1: a quantidade de gotas e a opacidade. */
     drawRain(ctx, amount) {
       if (amount < .03) return
