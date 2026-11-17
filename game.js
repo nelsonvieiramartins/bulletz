@@ -2431,13 +2431,19 @@ function meleeNav(enemy) {
   const diff = player.levelY - enemy.y
   if (Math.abs(diff) < 30) return null
   if (onTruck && Math.abs(player.x - enemy.x) > enemy.engage) {
-    // longe: fica no andar em que está e se aproxima por ele; na ponta do andar para (patrulha) em vez de cair
+    // longe: fica no andar em que está e se aproxima por ele. Se chega à ponta do andar sem poder seguir (o andar não leva ao do jogador),
+    // fica "preso" naquele andar: vai até o ponto de subir/descer mais próximo (a rota abaixo) em vez de ficar parado na ponta. A marca
+    // enemy.stuck vale enquanto ele está nesse andar e o jogador continua do mesmo lado: sem ela ele voltaria à ponta e ficaria indo e vindo.
     const here = platforms.find(([x, y, w]) => Math.abs(y - enemy.y) < 2 && enemy.x >= x - 6 && enemy.x <= x + w + 6)
     const toward = Math.sign(player.x - enemy.x) || 1
-    if (here && ((toward > 0 ? here[0] + here[2] - 16 : here[0] + 16) - enemy.x) * toward <= 0) return { hold: true }
-    return null
-  }
+    const atEdge = here && ((toward > 0 ? here[0] + here[2] - 16 : here[0] + 16) - enemy.x) * toward <= 0
+    const s = enemy.stuck
+    if (atEdge) enemy.stuck = { y: enemy.y, toward }
+    else if (!(s && Math.abs(s.y - enemy.y) < 2 && s.toward === toward)) enemy.stuck = null
+    if (!enemy.stuck) return null
+  } else enemy.stuck = null
   if (onTruck && crowdAtPlayerLevel(enemy) >= maxPerLevel) return { hold: true }
+  if (onTruck) enemy.stuck = { y: enemy.y, toward: Math.sign(player.x - enemy.x) || 1 }   // seguiu a rota: não volta a rondar por este andar (senão ia e voltava na ponta)
   if (diff < 0) {
     let best = null
     for (const [x, y, w] of platforms) {
@@ -2541,6 +2547,7 @@ function updateMelee(enemy, distance, config, dt) {
     } else if (nav) {
       const toNav = nav.x - enemy.x
       target = Math.abs(toNav) > 4 ? Math.sign(toNav) * config.speed : dir * 30
+      if (Math.abs(toNav) > 4) enemy.face = Math.sign(toNav)   // vai pelo caminho de frente, sem andar de costas
       if (nav.jump && enemy.jumpWait <= 0) { enemy.vy = -292; enemy.jumpWait = .8 }
       else if (nav.drop && enemy.jumpWait <= 0 && Math.random() < dt * 4) { dropDown(enemy, 130); enemy.jumpWait = .8 }   // salta para baixo, atravessando o piso
     }
@@ -3971,7 +3978,7 @@ Promise.all([
       get lives() { return players[0].lives }, set lives(v) { for (const p of players) p.lives = v },
       get weather() { return weather }, set weather(v) { weather = v },
       get rain() { return rainAmount },
-      mapFrame, spriteHidden, get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
+      meleeNav, mapFrame, spriteHidden, get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
       get storm() { return storm }, get waveIndex() { return waveState.index },
       setWave(i) { waveState.index = i; rainAmount = rainByWave[Math.min(i, rainByWave.length - 1)]; weather = weatherByWave[Math.min(i, weatherByWave.length - 1)] },
       get god() { return players[0].inv > 1e5 }, set god(v) { for (const p of players) p.inv = v ? 1e9 : 0 },
