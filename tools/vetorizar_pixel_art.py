@@ -10,7 +10,25 @@ import argparse
 from collections import Counter
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
+
+
+def clear_dark_background(src, threshold):
+    src = src.convert('RGBA')
+    red, green, blue, alpha = src.split()
+    brightness = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+    # Seal narrow gaps in dark outlines before finding the exterior.
+    mask_size = ((src.width + 3) // 4, (src.height + 3) // 4)
+    candidates = brightness.resize(mask_size, Image.Resampling.BOX)
+    candidates = candidates.point(lambda value: 255 if value <= threshold else 0)
+    candidates = candidates.filter(ImageFilter.MinFilter(9)).filter(ImageFilter.MaxFilter(9))
+    padded = Image.new('L', (mask_size[0] + 2, mask_size[1] + 2), 255)
+    padded.paste(candidates, (1, 1))
+    ImageDraw.floodfill(padded, (0, 0), 128)
+    outside = padded.crop((1, 1, mask_size[0] + 1, mask_size[1] + 1))
+    keep = outside.point(lambda value: 0 if value == 128 else 255).resize(src.size, Image.Resampling.NEAREST)
+    src.putalpha(ImageChops.multiply(alpha, keep))
+    return src
 
 
 def reduce_to_grid(src, cell, colors):
@@ -88,8 +106,13 @@ if __name__ == '__main__':
     ap.add_argument('--celula', type=float, default=10.53, help='tamanho do pixel na imagem de entrada')
     ap.add_argument('--cores', type=int, default=28)
     ap.add_argument('--escala', type=int, default=8, help='pontos por pixel no SVG')
+    ap.add_argument('--fundo-escuro', type=int, choices=range(256), metavar='0–255',
+                    help='remove o fundo escuro conectado às bordas até esse limite RGB')
     a = ap.parse_args()
-    im = trim(reduce_to_grid(Image.open(a.entrada), a.celula, a.cores))
+    src = Image.open(a.entrada)
+    if a.fundo_escuro is not None:
+        src = clear_dark_background(src, a.fundo_escuro)
+    im = trim(reduce_to_grid(src, a.celula, a.cores))
     out = Path(a.saida)
     im.save(out.with_suffix('.png'))
     svg, ncolors, nrects = to_svg(im, a.escala, out.name)

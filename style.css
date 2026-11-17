@@ -33,8 +33,8 @@ button:hover,select:hover{border-color:var(--green)}button:focus-visible,a:focus
 .esc-hint kbd{padding:1px 4px}
 
 /* Modos: título, jogando, menu */
-body[data-mode=title] .player-hud,body[data-mode=title] #hud-score,body[data-mode=title] .hud-progress,body[data-mode=title] .esc-hint{opacity:0}
-body[data-mode=title] .touch,body[data-mode=menu] .touch{visibility:hidden}
+body[data-mode=title] .player-hud,body[data-mode=title] #hud-score,body[data-mode=title] .hud-progress,body[data-mode=title] .esc-hint,body[data-mode=select] .player-hud,body[data-mode=select] #hud-score,body[data-mode=select] .hud-progress,body[data-mode=select] .esc-hint{opacity:0}
+body[data-mode=title] .touch,body[data-mode=menu] .touch,body[data-mode=select] .touch{visibility:hidden}
 .overlay{position:absolute;inset:0;z-index:5}
 .overlay[hidden]{display:none}
 
@@ -227,3 +227,38 @@ html.modo-celular .dev-panel{display:block;flex:none;width:calc(100 * var(--u));
 .dev-grid.two{grid-template-columns:repeat(2,1fr)}
 html.modo-celular .dev-pick{grid-template-columns:1fr auto}
 html.modo-celular .dev-pick .t-fase{grid-column:1 / -1}
+
+/* Segundo jogador: o HUD dele fica ao lado do primeiro, com o retrato em tom azul */
+.player-hud.p2{left:calc(var(--hud-inset) + 24cqw)}
+.player-hud.p2 .hud-portrait{border-color:#4aa8ff;box-shadow:2px 2px 0 #10091b,0 0 0 1px #1d4f86 inset}
+.dev-pick .t-jog,.dev-pick .t-fase{grid-column:1 / -1}
+html.modo-celular .player-hud.p2{left:calc(var(--hud-inset) + 38cqw)}
+@media(pointer:coarse) and (orientation:portrait){.player-hud.p2{left:calc(var(--hud-inset) + 38cqw)}}
+body[data-mode=title] .player-hud.p2,body[data-mode=select] .player-hud.p2{opacity:0}
+.two-players-note{margin:8px 0 0;font:12px/1.5 var(--mono);color:#ffd9a0}
+.two-players-note b{color:#5ac8ff}
+
+/* Selecionar personagem: título, dois cartões (moldura sci-fi com o personagem dentro) e a dica; o escolhido acende, o outro apaga */
+.select-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(6px,1.6cqw,22px);background:radial-gradient(ellipse at 50% 45%,#12081ccc,#05030af2 75%);text-align:center}
+.select-title{width:min(44cqw,620px);height:auto;filter:drop-shadow(0 0 22px #ff8a4a55)}
+.select-cards{display:flex;gap:clamp(14px,4cqw,56px);align-items:flex-end;justify-content:center}
+.select-card{position:relative;width:clamp(110px,21cqw,290px);padding:0;border:0;background:none;cursor:pointer;color:#ffd9a0;font:700 clamp(11px,1.7cqw,22px) var(--mono);letter-spacing:.24em;filter:brightness(.5) saturate(.55);transform:scale(.93);transition:filter .18s,transform .18s}
+.select-card:focus-visible{outline:none}
+.select-card.sel{filter:drop-shadow(0 0 14px #ff9a3ccc);transform:scale(1)}
+.select-card.taken{filter:grayscale(1) brightness(.35);transform:scale(.9);cursor:not-allowed}
+.card-art{position:relative;display:block;aspect-ratio:600/665}
+.card-fig{position:absolute;left:11.5%;top:11%;width:77%;height:76%;object-fit:cover;object-position:50% 0}
+.card-frame{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.card-name{display:block;margin-top:.5em;text-shadow:2px 2px 0 #3a1028}
+.card-tags{position:absolute;left:0;right:0;top:-1.9em;display:flex;justify-content:center;gap:.4em;pointer-events:none}
+.card-tag{display:none;padding:.15em .8em;font:700 .8em var(--mono);letter-spacing:.14em;color:#1a0a10;border:1px solid #fff4;border-radius:2px}
+.card-tag.p1{background:#ffb35a}
+.card-tag.p2{background:#5ac8ff}
+.select-card[data-p1] .card-tag.p1,.select-card[data-p2] .card-tag.p2{display:block}
+.select-hint{margin-top:.4em}
+@media(prefers-reduced-motion:reduce){.select-card{transition:none}}
+.select-cards{margin-top:clamp(14px,2.8cqw,38px)}
+
+.players-card{width:clamp(110px,22cqw,300px)}
+.players-card img{display:block;width:100%;height:auto}
+.players-screen .select-title{width:min(52cqw,720px)}

@@ -39,7 +39,7 @@ export function createGameFx(width, height) {
   const image = context.createImageData(width, height)
   const oneShots = []
   const ambient = []   // efeitos contínuos (fogo e fumaça em cima do helicóptero destruído)
-  let muzzle = null
+  const muzzles = [null, null]   // um clarão de cano por jogador
   // faixa de texto (combo-counter) e transição de tela (shatter-wipe, que tem tela própria de 320x180, esticada para a do jogo)
   let banner = null, bannerTime = 0, bannerLength = 0
   // texto "CHECK POINT" (level-up do pixelfx) no meio da tela
@@ -179,12 +179,13 @@ export function createGameFx(width, height) {
     },
     /** Chamar a cada quadro: { x, floor, height, flip, casingFloor, scale } enquanto o Edu atira, ou null.
      casingFloor = distância dos pés do Edu até o chão onde os cartuchos caem (0 no chão; maior no ar). */
-    muzzle(state) {
+    muzzle(state, slot = 0) {
       if (!state) {
-        if (muzzle) { muzzle.stop(); muzzle = null }
+        if (muzzles[slot]) { muzzles[slot].stop(); muzzles[slot] = null }
         return
       }
-      if (!muzzle) muzzle = createFx(muzzleSmg, { seed: seed() })
+      if (!muzzles[slot]) muzzles[slot] = createFx(muzzleSmg, { seed: seed() })
+      const muzzle = muzzles[slot]
       Object.assign(muzzle.options, { x: state.x, y: state.floor, height: state.height, flip: state.flip, casingFloor: state.casingFloor ?? -0.5, scale: state.scale ?? 1 })
       if (!muzzle.live) { muzzle.live = true; oneShots.push(muzzle) }
     },
@@ -224,7 +225,7 @@ export function createGameFx(width, height) {
     clear() {
       oneShots.length = 0
       ambient.length = 0
-      muzzle = null
+      muzzles.fill(null)
       banner = null
       checkpoint = null
       wipe = null

@@ -13,8 +13,8 @@
 <title>BULLETZ — Divorced Dad Rock</title>
 <script>try{if(localStorage.getItem('bulletz.modoCelular')==='1'&&['localhost','127.0.0.1','[::1]'].indexOf(location.hostname)>=0)document.documentElement.classList.add('modo-celular')}catch(e){}</script>
 <script>try{if(sessionStorage.getItem('bulletz.autostart'))document.documentElement.classList.add('stage-loading');setTimeout(function(){document.documentElement.classList.remove('stage-loading')},10000)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=42">
-<script type="module" src="game.js?v=194"></script>
+<link rel="stylesheet" href="style.css?v=50">
+<script type="module" src="game.js?v=224"></script>
 </head>
 <body data-mode="title">
 <main class="stage-shell">
@@ -51,15 +51,44 @@
       <button id="touch-menu" type="button" aria-label="Abrir menu">☰</button>
     </div>
 
+    <!-- Selecionar personagem (só na versão de teste, antes da tela do INICIAR JOGO) -->
+    <section id="players-screen" class="overlay select-screen players-screen" aria-label="Escolher jogadores" hidden>
+      <img class="select-title" src="assets/selecionar/jogadores-titulo.png" loading="lazy" alt="ESCOLHER JOGADORES">
+      <div class="select-cards players-cards" role="radiogroup" aria-label="Número de jogadores">
+        <button type="button" class="select-card players-card" data-n="1" role="radio" aria-checked="false"><img src="assets/selecionar/jogadores-1.png" loading="lazy" alt="P1 — 1 jogador"></button>
+        <button type="button" class="select-card players-card" data-n="2" role="radio" aria-checked="false"><img src="assets/selecionar/jogadores-2.png" loading="lazy" alt="P1 - P2 — 2 jogadores"></button>
+      </div>
+      <p class="title-hint select-hint">← → ESCOLHER · ENTER CONFIRMA · ESC VOLTA</p>
+    </section>
+
+    <section id="select-screen" class="overlay select-screen" aria-label="Selecionar player" hidden>
+      <img class="select-title" src="assets/selecionar/titulo.png" loading="lazy" alt="SELECIONAR PLAYER">
+      <div class="select-cards" role="radiogroup" aria-label="Personagem">
+        <button type="button" class="select-card" data-char="edu" role="radio" aria-checked="false">
+          <span class="card-tags"><span class="card-tag p1">P1</span><span class="card-tag p2">P2</span></span>
+          <span class="card-art"><img class="card-fig" loading="lazy" src="assets/selecionar/edu-retrato.png" alt=""><img class="card-frame" loading="lazy" src="assets/selecionar/moldura.png" alt=""></span>
+          <span class="card-name">COMANDO</span>
+        </button>
+        <button type="button" class="select-card" data-char="operativo" role="radio" aria-checked="false">
+          <span class="card-tags"><span class="card-tag p1">P1</span><span class="card-tag p2">P2</span></span>
+          <span class="card-art"><img class="card-fig" loading="lazy" src="assets/selecionar/operativo-retrato.png" alt=""><img class="card-frame" loading="lazy" src="assets/selecionar/moldura.png" alt=""></span>
+          <span class="card-name">OPERADOR</span>
+        </button>
+      </div>
+      <p class="title-hint select-hint">← → ESCOLHER · ENTER CONFIRMA</p>
+    </section>
+
     <section id="title-screen" class="overlay title-screen" aria-label="Tela inicial">
       <img class="title-logo" src="assets/logo-bulletz.png" alt="BULLETZ — Divorced Dad Rock">
       <button id="start" type="button" class="start-button art-btn art-iniciar">INICIAR JOGO</button>
       <nav class="title-links" aria-label="Ferramentas de teste">
+        <label>Jogadores <select class="t-jog" aria-label="Número de jogadores"><option value="1">1 jogador</option><option value="2">2 jogadores</option></select></label>
         <label>Fase <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select></label>
         <label>Ir para <select class="t-alvo" aria-label="Ponto de teste"></select></label>
         <button type="button" class="t-go">Ir</button>
         <a href="efeitos.html">Teste FX</a>
         <a href="sprites.html">Sprites</a>
+        <a href="#" id="t-char" role="button">Personagem</a>
         <a href="#" id="phone-toggle" role="button">Modo celular</a>
       </nav>
       <p class="title-hint">ENTER PARA COMEÇAR · ESC ABRE O MENU</p>
@@ -204,6 +233,7 @@
     <section>
       <h2>Ir para</h2>
       <div class="dev-pick">
+        <select class="t-jog" aria-label="Número de jogadores"><option value="1">1 jogador</option><option value="2">2 jogadores</option></select>
         <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select>
         <select class="t-alvo" aria-label="Ponto de teste"></select>
         <button type="button" class="t-go">Ir</button>

@@ -1,6 +1,6 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js'
-import { createGameFx } from './gamefx.js?v=5'
+import { createGameFx } from './gamefx.js?v=6'
 import { applySpriteConfig } from './spriteconfig.js'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js'
@@ -36,6 +36,7 @@ function goToStage(fase, { autostart = true, extra = {} } = {}) {
   history.replaceState(null, '', url)
   try { if (autostart) sessionStorage.setItem('bulletz.autostart', '1'); else sessionStorage.removeItem('bulletz.autostart') } catch {}
   if (autostart) document.documentElement.classList.add('stage-loading')   // preto enquanto a nova fase carrega
+  else { try { sessionStorage.setItem('bulletz.skipSelect', '1') } catch {} }   // o SAIR volta direto à tela inicial
   disposeInstance()
   import('./game.js?boot=' + Date.now()).catch((error) => { console.error('Troca de fase sem recarregar falhou:', error); try { sessionStorage.setItem('bulletz.bootError', String(error?.stack || error)) } catch {} location.href = url })   // plano B: recarrega a página
 }
@@ -68,7 +69,6 @@ const fireInterval = .09
 const fireSpread = 1.5
 // O som e o clarão seguem fireInterval; só 1 a cada bulletEvery disparos solta uma bala de verdade
 const bulletEvery = 2
-let shotTick = 0
 // Folhas do Edu (assets/edu-v2): células de 192x160, eixo do corpo em x=80 e pés em y=152,
 // desenhadas na metade do tamanho em unidades do mundo (1:1 nos pixels do canvas).
 const heroCell = { w: 192, h: 160, anchorX: 80, feetY: 152 }
@@ -91,6 +91,15 @@ const sequences = {
   idleFire: { file: 'edu-v2/parado-atirando.png', count: 1 },
   playerFall: { file: 'edu-v2/queda.png?v=2', count: 4 },
   jump: { file: 'edu-v2/pulo.png', count: 4 }
+}
+// Personagens jogáveis: o Edu e o Operador (assets/operador, só na versão de teste). Cada um tem as suas folhas (as do Operador entram como
+// 'op_run', 'op_jump'...) e o seu canto de cano por pose. As folhas do Operador já trazem as pernas encolhidas desenhadas no pulo: sem "lift".
+let operadorCfg = null
+try { operadorCfg = await (await fetch('assets/operador/config.json?v=12')).json() } catch (error) { console.warn('config do Operador não carregada', error) }
+const operadorFiles = { idle: 'respiracao.png', run: 'corrida.png', runFire: 'corrida-atirando.png', idleFire: 'parado-atirando.png', playerFall: 'queda.png', jump: 'pulo.png', crouch: 'agachamento.png' }
+const heroSets = {
+  edu: { prefix: '', tuckLift: jumpTuckLift, runFire: runFireMuzzles, idleFire: idleFireMuzzle, crouch: crouchFireMuzzle, jump: jumpFireMuzzles },
+  operativo: operadorCfg ? { prefix: 'op_', tuckLift: operadorCfg.tuckLift ?? 0, runFire: operadorCfg.runFire, idleFire: operadorCfg.idleFire[0], crouch: operadorCfg.crouch[2], jump: [operadorCfg.jump[2], operadorCfg.jump[3]] } : null
 }
 const fallFrameDuration = .11
 const fallDuration = .68
@@ -224,9 +233,7 @@ await applySpriteConfig({ runFire: runFireMuzzles, idleFire: idleFireMuzzle, cro
 const enemies = []
 const enemyShots = []
 const maxLives = 3
-let lives = maxLives
 let score = 0
-let invulnerability = 0
 // Fase 1: o chefe é o Oficial de Justiça no helicóptero (assets/boss-heli, montado por tools/montar_heli.py). Fase 2: O Cobrador a pé.
 const heliBoss = stage === 1
 const heliMeta = heliBoss ? await (await fetch('assets/boss-heli/heli.json')).json() : null
@@ -287,7 +294,7 @@ function populateEnemies(at) {
 }
 populateEnemies(70)
 const keys = new Set()
-const keyboard = new Set(['ArrowLeft','ArrowRight','ArrowDown','KeyA','KeyD','KeyS','Space','ArrowUp','KeyW','KeyG'])
+const keyboard = new Set(['ArrowLeft','ArrowRight','ArrowDown','KeyA','KeyD','KeyS','Space','ArrowUp','KeyW','KeyG','KeyL','Numpad0','Numpad1','Numpad4'])
 const neutralPad = { direction: 0, jump: false, fire: false, crouch: false, restart: false }
 const padButtons = { south: 0, west: 2, start: 9, down: 13, left: 14, right: 15 }
 const stickDeadzone = 0.20
@@ -303,7 +310,6 @@ const impacts = []
 const sparks = []
 const powerUpMotes = []
 const powerUpDuration = 2.95
-let powerUpVisual = 0
 const droneExplosions = []
 let gameFx = createGameFx(width, height)   // pixelfx: cano, faísca de acerto, medalha
 const explosionColorCanvas = document.createElement('canvas')
@@ -334,7 +340,7 @@ function applyViewport() {
   ctx.imageSmoothingEnabled = false
   buildExplosionBuffers()
   gameFx = createGameFx(width, height)
-  camera = Math.max(0, player.x - walkLead() + 9)
+  camera = Math.max(0, focusX() - walkLead() + 9)
 }
 portraitQuery.addEventListener('change', applyViewport)
 // Modo celular (só na versão local de teste): liga e desliga a visualização do celular em pé no computador (lembrado no navegador)
@@ -355,11 +361,7 @@ flashSprite.height = 200
 const flashCtx = flashSprite.getContext('2d')
 let camera = 0
 let elapsed = 0
-let idleTime = 0
-let playerFall = null
-let playerLevelY = 0   // altura do chão em que o Edu pisou por último; os Fofões se orientam por ela
 let last = 0
-let jumpPressed = false
 let respawnX = onTruck ? fase21.startX : 70
 let zoneIndex = 0
 let finish = false
@@ -380,12 +382,44 @@ let readFrame = -1
 let progress = -1
 let noticeUntil = 0
 const startX = onTruck ? fase21.startX : 70
-const player = {x:startX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false}
+// Jogadores: o Edu (P1) e, no modo de teste com ?jogadores=2, um segundo jogador na mesma tela (por enquanto com o mesmo sprite).
+// Todo o estado de cada um fica no próprio objeto. "player" é o jogador da vez: o laço de atualização o troca para cada jogador e a IA
+// dos inimigos o aponta para o jogador mais próximo, então o código antigo (que lê "player") continua valendo sem reescrever.
+const testHost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || new URLSearchParams(location.search).has('debug')
+const twoPlayers = testHost && new URLSearchParams(location.search).get('jogadores') === '2'
+const makePlayer = (idx) => ({
+  idx, x: Math.max(14, startX - idx * 26), y: groundY, vx: 0, vy: 0, face: 1, grounded: true, coyote: 0.09, buffer: 0, phase: 0, cooldown: 0, crouch: 0, trigger: false, mover: null,
+  lives: maxLives, inv: 0, fall: null, levelY: groundY /* chão em que pisou por último; os Fofões se orientam por ele */, jumpPressed: false, shotTick: 0, idleTime: 0, powerVisual: 0
+})
+const players = [makePlayer(0)]
+if (twoPlayers) players.push(makePlayer(1))
+let player = players[0]
+// Teclado: no modo de 1 jogador tudo como sempre; com 2, o P1 usa A/D/W/S (G atira) e o P2 as setas (L ou Numpad 1/4 atiram; seta para cima ou Numpad 0 pulam)
+const controlSets = twoPlayers
+  ? [{ left: ['KeyA'], right: ['KeyD'], down: ['KeyS'], jump: ['Space', 'KeyW'], fire: ['KeyG'] },
+     { left: ['ArrowLeft'], right: ['ArrowRight'], down: ['ArrowDown'], jump: ['ArrowUp', 'Numpad0'], fire: ['KeyL', 'Numpad1', 'Numpad4'] }]
+  : [{ left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'], down: ['ArrowDown', 'KeyS'], jump: ['Space', 'ArrowUp', 'KeyW'], fire: ['KeyG'] }]
+const alivePlayers = () => players.filter((p) => !p.fall && p.lives > 0)
+// A câmera segue o jogador mais à frente: quem fica para trás (no canto esquerdo) não segura a tela; a câmera o empurra junto.
+const focusX = () => { const live = alivePlayers(); return live.length ? Math.max(...live.map((p) => p.x)) : players[0].x }
 const notice = select('#notice')
 const progressText = select('#progress')
 const livesText = select('#lives')
 const lifeMedals = [...livesText.querySelectorAll('img')]
 const playerHud = select('#player-hud')
+// Um bloco de HUD (retrato + vidas) por jogador; o do P2 é uma cópia do primeiro ao lado dele, com o retrato em azul
+const hudSlots = players.map((p, i) => {
+  if (i === 0) return { root: playerHud, medals: lifeMedals, livesEl: livesText, face: '', lives: -1 }
+  const root = playerHud.cloneNode(true)
+  root.id = 'player-hud-2'
+  root.classList.add('p2')
+  root.removeAttribute('data-face')
+  root.setAttribute('aria-label', 'HUD do jogador 2')
+  const livesEl = root.querySelector('.hud-lives')
+  livesEl.id = 'lives-2'
+  playerHud.after(root)
+  return { root, medals: [...livesEl.querySelectorAll('img')], livesEl, face: '', lives: -1 }
+})
 const bossMeter = select('#boss-health')
 const bossHud = select('#boss-hud')
 if (heliBoss) {   // no lugar do Cobrador: nome e vida do Oficial
@@ -406,8 +440,6 @@ const scoreDigits = [
 ]
 const scoreColors = ['#fff5ce','#ffdc99','#ffc06b','#ffa54b','#fa883b','#ef6c31','#d44928']
 let hudScore = -1
-let hudLives = -1
-let hudFace = ''
 const padStatus = select('#pad-status')
 const padSetup = select('#pad-setup')
 const padPrompt = select('#pad-prompt')
@@ -465,6 +497,7 @@ if (!devTools) {
   document.querySelector('#menu-phone').onclick = () => setPhoneMode(!document.documentElement.classList.contains('modo-celular'))
   document.querySelector('#phone-toggle').onclick = (event) => { event.preventDefault(); setPhoneMode(!document.documentElement.classList.contains('modo-celular')) }
   document.querySelector('#dev-phone-off').onclick = () => setPhoneMode(false)
+  document.querySelector('#t-char').onclick = (event) => { event.preventDefault(); if (mode === 'title') { selectReturn = 'title'; openSelect() } }
   document.querySelector('#dev-test-end').onclick = () => { if (mode === 'play') document.querySelector('#test-end').click() }   // dispara o final da fase em que o Edu está
   document.querySelector('#dev-test-boss').onclick = () => { if (mode === 'play') document.querySelector('#test-boss').click() }
   document.querySelector('#test-boss').onclick = () => { if (onTruck) { announce('A Fase 2.1 não tem boss', 1.6); return } startBossTest(); resumeGame() }
@@ -472,7 +505,16 @@ if (!devTools) {
   const alvos = { '1': [['', 'Início da fase'], ['boss', 'Boss (vida no fim)']], '2': [['', 'Início da fase'], ['boss', 'Boss (vida no fim)'], ['fim', 'Final da fase → 2.1']], '2.1': [['', 'Início da fase'], ['fim', 'Final da Fase 2.1']] }
   const faseAtual = onTruck ? '2.1' : String(stage)
   for (const root of document.querySelectorAll('.title-links, .dev-pick')) {
-    const fase = root.querySelector('.t-fase'), alvo = root.querySelector('.t-alvo')
+    const fase = root.querySelector('.t-fase'), alvo = root.querySelector('.t-alvo'), jog = root.querySelector('.t-jog')
+    if (jog) {   // 1 ou 2 jogadores: recarrega a página com ?jogadores=2 (ou sem)
+      jog.value = twoPlayers ? '2' : '1'
+      jog.onchange = () => {
+        const u = new URL(location.href)
+        if (jog.value === '2') u.searchParams.set('jogadores', '2'); else u.searchParams.delete('jogadores')
+        try { sessionStorage.setItem('bulletz.skipSelect', '1') } catch {}
+        location.href = u.href
+      }
+    }
     const fill = () => { alvo.replaceChildren(...alvos[fase.value].map(([v, label]) => new Option(label, v))) }
     fase.value = faseAtual
     fill()
@@ -481,6 +523,8 @@ if (!devTools) {
       const params = new URLSearchParams()
       if (fase.value !== '1') params.set('fase', fase.value)
       if (alvo.value) params.set(alvo.value, '')
+      if (twoPlayers) params.set('jogadores', '2')
+      try { sessionStorage.setItem('bulletz.skipSelect', '1') } catch {}
       location.href = 'index.html' + (params.toString() ? '?' + params.toString().replace(/=(&|$)/g, '$1') : '')
     }
   }
@@ -613,14 +657,17 @@ function announce(message, duration) {
   noticeUntil = elapsed + duration
 }
 
+// Volta um jogador à vida: em x (e no chão) ou, se vier um parceiro, ao lado dele
+function respawnPlayer(p, x, y = groundY, grounded = true) {
+  Object.assign(p, { x, y, vx: 0, vy: 0, face: 1, grounded, coyote: 0.09, buffer: 0, phase: 0, cooldown: 0, crouch: 0, trigger: false, mover: null,
+    fall: null, inv: .9, levelY: groundY, jumpPressed: false, shotTick: 0, idleTime: 0, powerVisual: 0 })
+}
 function reset(all = true) {
-  idleTime = 0
-  playerFall = null
   pendingShotAt = -Infinity
   if (all) {
     respawnX = startX
     zoneIndex = 0
-    lives = maxLives
+    for (const p of players) p.lives = maxLives
     score = 0
     bossHud.hidden = true
     finish = false
@@ -634,19 +681,15 @@ function reset(all = true) {
     outSeq = null
     hideGameOver()
   }
-  invulnerability = .9
   enemyShots.length = 0
-  Object.assign(player,{x:respawnX,y:groundY,vx:0,vy:0,face:1,grounded:true,coyote:0.09,buffer:0,phase:0,cooldown:0,crouch:0,trigger:false,mover:null})
-  playerLevelY = player.y
-  camera = onTruck ? clamp(player.x - cameraLeadNow(), 0, cameraMaxNow()) : Math.max(0, player.x - walkLead() + 9)
+  players.forEach((p, i) => { if (all || p.lives > 0) respawnPlayer(p, Math.max(14, respawnX - i * 26)) })   // quem já está fora de jogo continua fora
+  camera = onTruck ? clamp(focusX() - cameraLeadNow(), 0, cameraMaxNow()) : Math.max(0, focusX() - walkLead() + 9)
   shots.length = 0
   impacts.length = 0
   sparks.length = 0
   powerUpMotes.length = 0
-  powerUpVisual = 0
   droneExplosions.length = 0
   gameFx.clear()
-  jumpPressed = false
 }
 
 // Fase 2.1: ondas de inimigos. Cada onda só começa quando a anterior foi derrotada; os inimigos entram um a um pela borda da tela.
@@ -790,7 +833,7 @@ function pickupWheels(sheet) {
 function convoyTruckWidth() { return sprites.truck.width / pixelScale }
 function startConvoy() {
   const c = convoyCfg, px = player.x
-  player.trigger = false
+  for (const p of players) p.trigger = false
   // quem está na tela e à frente some: a rua fica livre para as caminhonetes e a carreta (o som da colisão continua)
   for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].x >= camera - 20) enemies.splice(i, 1)
   enemyShots.length = 0
@@ -911,7 +954,7 @@ const doorScreenX = () => ending.doorOnScreen - (wideWidth - width)
 function startEnding() {
   const v0 = roadSpeed
   endSeq = { phase: 'brake', t: 0, v0, dir: 0, free: false, roadEnd: roadPos + v0 * ending.brake / 3, wiped: false }
-  player.trigger = false
+  for (const p of players) p.trigger = false
 }
 function resetEnding() {
   roadPos = 0
@@ -979,13 +1022,15 @@ function updateSuspension(dt) {
 function resetSuspension() { suspension.y = suspension.v = suspension.offset = 0; suspension.next = 2.2 }
 
 function setKey(key, active) {
-  if (active && !keys.has(key) && ['Space','ArrowUp','KeyW'].includes(key)) jumpPressed = true
+  if (active && !keys.has(key)) for (const p of players) if (controlSets[p.idx].jump.includes(key)) p.jumpPressed = true
   if (active) keys.add(key)
   else keys.delete(key)
 }
 
 // Telas: 'title' (logo + INICIAR JOGO), 'play' (jogando) e 'menu' (pausa com as informações, no ESC)
 const titleScreen = select('#title-screen')
+const selectScreen = select('#select-screen')
+const playersScreen = select('#players-screen')
 const menuScreen = select('#menu')
 const fullscreenToggle = select('#fullscreen-toggle')
 let mode = 'title'
@@ -997,10 +1042,12 @@ function setMode(next) {
   mode = next
   document.body.dataset.mode = next
   titleScreen.hidden = next !== 'title'
+  selectScreen.hidden = next !== 'select'
+  playersScreen.hidden = next !== 'players'
   menuScreen.hidden = next !== 'menu'
   if (next === 'title') hideGameOver()
   keys.clear()
-  jumpPressed = false
+  for (const p of players) p.jumpPressed = false
 }
 function enterFullscreen() {
   const root = document.documentElement
@@ -1008,8 +1055,18 @@ function enterFullscreen() {
   fullscreenRequestAt = performance.now()
   root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
 }
+// A seleção de personagem vem depois do INICIAR JOGO (só na versão de teste). Fica de fora nas trocas de fase, nos atalhos de teste
+// (?fase, ?boss, ?fim) e quando a página foi recarregada pelos seletores do modo de teste.
+let selectDone = !testHost
+let playersDone = !testHost   // 1 ou 2 jogadores (vem antes da escolha de personagem)
+let selectReturn = 'play'
 function startGame() {
   if (mode !== 'title') return
+  if (!playersDone) { openPlayers(); return }
+  if (!selectDone) { selectReturn = 'play'; openSelect(); return }
+  beginPlay()
+}
+function beginPlay() {
   wantFullscreen = true
   enterFullscreen()
   setMode('play')
@@ -1040,7 +1097,7 @@ if (select('#test-end')) {
   const testEnd = select('#test-end')
   testEnd.textContent = onTruck ? 'Teste: final da Fase 2.1' : stage === 2 ? 'Teste: final da Fase 2 → 2.1' : 'Teste: final da Fase 1 → 2'
   testEnd.onclick = () => {
-    if (finish || convoy || endSeq || outSeq || lives === 0) return
+    if (finish || convoy || endSeq || outSeq || players.every((p) => p.lives === 0)) return
     resumeGame()
     finish = true
     if (onTruck) startEnding()
@@ -1102,7 +1159,7 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyR') reset()
 })
 window.addEventListener('keyup', (event) => setKey(event.code,false))
-window.addEventListener('blur', () => { keys.clear(); jumpPressed = false })
+window.addEventListener('blur', () => { keys.clear(); for (const p of players) p.jumpPressed = false })
 game.addEventListener('pointerdown', () => game.focus())
 for (const button of document.querySelectorAll('[data-key]')) {
   const key = button.dataset.key
@@ -1329,6 +1386,174 @@ function readPad(dt) {
   return input
 }
 
+// ---- Selecionar personagem (só na versão de teste, antes da tela do INICIAR JOGO)
+// Dois personagens: o Edu e o Operativo. O P1 escolhe e, com 2 jogadores, o P2 fica com o outro. Por enquanto os dois usam o sprite do Edu
+// em jogo (o P2 em azul); a escolha troca o retrato do HUD e fica guardada na sessão para as próximas fases.
+const characters = ['edu', 'operativo']
+const portraitSources = { neutral: 'p2-neutro', shout: 'p2-grito', pain: 'p2-dor', blink: 'p2-piscada', left: 'p2-neutro', right: 'p2-neutro', up: 'p2-neutro' }
+function setHudCharacter(slot, character) {
+  for (const img of slot.root.querySelectorAll('.hud-portrait img')) {
+    img.dataset.orig ??= img.getAttribute('src')
+    const key = [...img.classList].find((n) => n.startsWith('portrait-'))?.slice(9)
+    img.src = character === 'operativo' ? 'assets/selecionar/' + (portraitSources[key] ?? 'p2-neutro') + '.png?v=2' : img.dataset.orig
+  }
+}
+let chosenP1 = 0
+try {
+  const saved = JSON.parse(sessionStorage.getItem('bulletz.chars') ?? 'null')
+  if (Array.isArray(saved) && characters.includes(saved[0])) chosenP1 = characters.indexOf(saved[0])
+} catch {}
+if (!testHost) chosenP1 = 0   // na versão publicada só o Edu
+function applyCharacters() {
+  players.forEach((p, i) => {
+    p.character = characters[i === 0 ? chosenP1 : 1 - chosenP1]
+    setHudCharacter(hudSlots[i], p.character)
+  })
+  try { sessionStorage.setItem('bulletz.chars', JSON.stringify(players.map((p) => p.character))) } catch {}
+}
+const selectCards = [...selectScreen.querySelectorAll('.select-card')]
+// Tela "Escolher jogadores" (depois do INICIAR JOGO): 1 ou 2. Mudar o número recarrega a página com ?jogadores=2 (ou sem) e segue para a escolha de personagem.
+const playersCards = [...playersScreen.querySelectorAll('.players-card')]
+let playersSel = twoPlayers ? 1 : 0
+let playersOpenedAt = 0
+function renderPlayers() {
+  playersCards.forEach((card, i) => { card.classList.toggle('sel', i === playersSel); card.setAttribute('aria-checked', String(i === playersSel)) })
+}
+function openPlayers() {
+  playersOpenedAt = performance.now()
+  playersSel = twoPlayers ? 1 : 0
+  renderPlayers()
+  setMode('players')
+}
+function movePlayers(step) {
+  playersSel = (playersSel + step + 2) % 2
+  renderPlayers()
+  sfx.play('checkpoint', { volume: .25 })
+}
+function confirmPlayers() {
+  if (performance.now() - playersOpenedAt < 350) return
+  if ((playersSel === 1) === twoPlayers) { playersDone = true; selectReturn = 'play'; openSelect(); return }
+  const u = new URL(location.href)
+  if (playersSel === 1) u.searchParams.set('jogadores', '2'); else u.searchParams.delete('jogadores')
+  try { sessionStorage.setItem('bulletz.afterPlayers', '1') } catch {}
+  location.href = u.href
+}
+playersCards.forEach((card, i) => {
+  card.addEventListener('mouseover', () => { if (mode === 'players' && playersSel !== i) { playersSel = i; renderPlayers() } })
+  card.addEventListener('click', () => { if (mode !== 'players') return; playersSel = i; confirmPlayers() })
+})
+window.addEventListener('keydown', (event) => {
+  if (mode !== 'players' || event.altKey || event.ctrlKey || event.metaKey) return
+  if (event.code === 'Escape') setMode('title')
+  else if (['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'].includes(event.code)) movePlayers(-1)
+  else if (['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS'].includes(event.code)) movePlayers(1)
+  else if (['Enter', 'NumpadEnter', 'Space', 'KeyG', 'KeyL'].includes(event.code)) confirmPlayers()
+  else return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+}, true)
+
+// Com 2 jogadores a escolha tem 2 etapas: o P1 escolhe e o P2 fica só com o que sobrou (não pode repetir). Com 1 jogador, só o P1 escolhe.
+let selPhase = 0
+const freeIndex = () => characters.findIndex((_, i) => i !== chosenP1)
+function renderSelect() {
+  const two = players.length > 1
+  selectCards.forEach((card, i) => {
+    const taken = two && selPhase === 1 && i === chosenP1
+    const onP2 = two && (selPhase === 1 ? i === freeIndex() : i !== chosenP1)
+    card.classList.toggle('sel', two && selPhase === 0 ? true : selPhase === 0 ? i === chosenP1 : i === freeIndex())   // com 2 jogadores as duas fotos ficam acesas; a seta só troca P1 e P2
+    card.classList.toggle('taken', taken)
+    card.setAttribute('aria-checked', String(selPhase === 0 ? i === chosenP1 : i === freeIndex()))
+    card.toggleAttribute('data-p1', two ? i === chosenP1 : false)
+    card.toggleAttribute('data-p2', onP2)
+  })
+}
+let selectOpenedAt = 0
+function openSelect() {
+  selectOpenedAt = performance.now()
+  selPhase = 0
+  renderSelect()
+  setMode('select')
+}
+function moveSelect(step) {
+  if (selPhase === 1) return   // o P2 só tem o personagem que sobrou
+  chosenP1 = (chosenP1 + step + characters.length) % characters.length
+  renderSelect()
+  sfx.play('checkpoint', { volume: .25 })
+}
+function confirmSelect() {
+  if (performance.now() - selectOpenedAt < 350) return   // o mesmo toque que abriu a tela não confirma
+  if (players.length > 1 && selPhase === 0 && characters.length > 2) { selPhase = 1; renderSelect(); sfx.play('checkpoint', { volume: .25 }); return }
+  applyCharacters()
+  selPhase = 0
+  if (selectReturn === 'play') { selectDone = true; setMode('title'); beginPlay() }
+  else setMode('title')
+}
+selectCards.forEach((card, i) => {
+  card.addEventListener('mouseover', () => { if (mode === 'select' && selPhase === 0 && chosenP1 !== i) { chosenP1 = i; renderSelect() } })
+  card.addEventListener('click', () => {
+    if (mode !== 'select') return
+    if (selPhase === 1) { if (i === freeIndex()) confirmSelect(); return }
+    chosenP1 = i; confirmSelect()
+  })
+})
+window.addEventListener('keydown', (event) => {
+  if (mode !== 'select' || event.altKey || event.ctrlKey || event.metaKey) return
+  if (event.code === 'Escape') { if (selPhase === 1) { selPhase = 0; renderSelect() } else { if (selectReturn === 'play') playersDone = false; setMode('title') } }   // ESC na escolha de personagem volta ao título (e à escolha de jogadores)
+  else if (['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'].includes(event.code)) moveSelect(-1)
+  else if (['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS'].includes(event.code)) moveSelect(1)
+  else if (['Enter', 'NumpadEnter', 'Space', 'KeyG', 'KeyL'].includes(event.code)) confirmSelect()
+  else return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+}, true)
+let selectPadDir = 0
+function selectPadInput(pad) {
+  const dir = Math.abs(pad.direction) > .5 ? Math.sign(pad.direction) : 0
+  const players = mode === 'players'
+  if (dir && dir !== selectPadDir) { if (players) movePlayers(dir); else moveSelect(dir) }
+  selectPadDir = dir
+  if (pad.jump || pad.restart) { if (players) confirmPlayers(); else confirmSelect() }
+}
+applyCharacters()
+renderSelect()
+
+// Menu de pausa: com 2 jogadores, lembra quem usa o quê
+if (twoPlayers) {
+  const keysBox = document.querySelector('#menu .keys')
+  const note = document.createElement('p')
+  note.className = 'two-players-note'
+  note.innerHTML = '<b>2 JOGADORES</b> · P1 (laranja): <kbd>A</kbd> <kbd>D</kbd> mover, <kbd>W</kbd>/<kbd>Espaço</kbd> pular, <kbd>S</kbd> agachar, <kbd>G</kbd> atirar · P2 (azul): <kbd>←</kbd> <kbd>→</kbd> mover, <kbd>↑</kbd>/<kbd>Num 0</kbd> pular, <kbd>↓</kbd> agachar, <kbd>L</kbd>/<kbd>Num 1</kbd>/<kbd>Num 4</kbd> atirar · o 1º controle é do P1 e o 2º do P2'
+  keysBox?.after(note)
+}
+// Segundo controle (jogador 2): o primeiro controle é do P1 (readPad); o próximo conectado é do P2, no mapeamento padrão
+let pad2JumpHeld = false
+let pad2StartHeld = false
+function readPad2() {
+  let devices = []
+  if (canReadPads) { try { devices = Array.from(navigator.getGamepads()) } catch { canReadPads = false } }
+  const pad = devices.filter((d) => d?.connected && d.index !== padIndex)[0]
+  if (!pad || document.hidden) { pad2JumpHeld = pad2StartHeld = false; return neutralPad }
+  const pressed = (button) => Boolean(pad.buttons[button]?.pressed)
+  const jumpHeld = pressed(padButtons.south)
+  const fireHeld = pressed(pad.buttons.length > 2 ? padButtons.west : 1)
+  const startHeld = pressed(padButtons.start)
+  const left = pressed(padButtons.left), right = pressed(padButtons.right)
+  const raw = pad.axes[0] ?? 0
+  const stick = Math.abs(raw) <= 1 ? raw : 0
+  const analog = Math.sign(stick) * Math.max(0, (Math.abs(stick) - stickDeadzone) / (1 - stickDeadzone))
+  const input = {
+    direction: left || right ? Number(right) - Number(left) : analog,
+    jump: jumpHeld && !pad2JumpHeld,
+    fire: fireHeld,
+    crouch: pressed(padButtons.down) || (pad.axes[1] > .64 && pad.axes[1] <= 1 && Math.abs(stick) < .5),
+    restart: startHeld && !pad2StartHeld
+  }
+  pad2JumpHeld = jumpHeld
+  pad2StartHeld = startHeld
+  return input
+}
+
 function updateMovers() {
   for (const m of movers) {
     if (m.manual) continue   // controlado por script (andar da carreta no fim da Fase 2)
@@ -1348,6 +1573,7 @@ function updatePaused(dt) {
     previewFrame = Math.floor(previewTime)
   }
   const pad = readPad(dt)
+  if (mode === 'select' || mode === 'players') { selectPadInput(pad); return }
   if (mode === 'menu') { if (menuPadInput(pad)) return }   // no menu de pausa o controle anda pelos botões
   else if (pad.jump && mode === 'title') { startGame(); return }
   if (!pad.restart) return
@@ -1387,25 +1613,146 @@ function update(dt) {
     previewFrame = Math.floor(previewTime)
   }
   const pad = readPad(dt)
+  const pad2 = players.length > 1 ? readPad2() : null
   if (!gameOverScreen.hidden) { menuPadInput(pad); return }
-  if (pad.restart) {
+  if (pad.restart || pad2?.restart) {
     openMenu()
     return
   }
-  if (playerFall) {
-    if (playerFall.age < fallDuration) updatePlayerFall(dt)
+  const pads = [pad, pad2]
+  const convoyActive = !!convoy && convoy.phase !== 'done'
+  const scripted = !!endSeq || convoyActive   // nos finais da 2 e da 2.1 o Edu anda sozinho
+  const exiting = finish && !endSeq && !convoyActive
+  // Cada jogador: quem está caindo (morrendo) anima a queda; quem está fora de jogo ou na saída da fase não age; nas cenas finais o
+  // segundo jogador acompanha o primeiro. Se ninguém puder agir, o mundo pára (como acontecia com um jogador só).
+  let anyActive = false
+  for (const p of [...players]) {   // cópia: takeLead() muda a ordem da lista no meio do laço
+    p.inv -= dt
+    player = p
+    if (p.fall) {
+      if (p.fall.age < fallDuration) updatePlayerFall(dt)
+      continue
+    }
+    if (p.lives === 0 || exiting) continue
+    if (scripted && p !== players[0]) { followLead(p, players[0]); anyActive = true; continue }
+    stepPlayer(dt, pads[p.idx] ?? neutralPad, scripted, convoyActive)
+    if (!p.fall) anyActive = true
+  }
+  player = players[0]
+  if (!anyActive) return
+  // o resto do mundo (inimigos, chefes, ondas) enxerga o jogador mais à frente; cada inimigo escolhe o mais próximo
+  const alive = alivePlayers()
+  const front = alive.reduce((a, b) => (b.x > a.x ? b : a), alive[0] ?? players[0])
+  player = front
+  if (!finish) updateCombat(dt)
+  if (!finish) updateRearGuard(dt, front)
+  if (onTruck) updateWaves(dt)
+  for (const p of players) {
+    player = p
+    const firing = p.trigger && p.lives > 0 && !finish && !p.fall ? playerPose().muzzle : null
+    // o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano: o clarão acompanha a ponta que se vê
+    gameFx.muzzle(firing ? { x: p.x + p.face*firing[0]*heroVisualScale, floor: p.y, height: -firing[1]*heroVisualScale, flip: p.face < 0, scale: charScale, casingFloor: groundBelow(p.x, p.y) - p.y - .5 } : null, p.idx)
+  }
+  player = players[0]
+  gameFx.update(dt)
+  for (let i=droneExplosions.length-1; i>=0; i--) {
+    const explosion = droneExplosions[i]
+    explosion.fx.update(dt)
+    if (explosion.fx.done()) droneExplosions.splice(i,1)
+  }
+  for (const p of players) {
+    if (p.powerVisual <= 0) continue
+    const age = powerUpDuration-p.powerVisual
+    p.powerVisual = Math.max(0,p.powerVisual-dt)
+    const intensity = Math.min(1,age/.16) * Math.min(1,p.powerVisual/.58)
+    if (age > .24 && Math.random() < dt*(20+18*intensity)) {
+      const side = Math.random() < .5 ? -1 : 1
+      powerUpMotes.push({
+        x: p.x + side*(8+Math.random()*12),
+        y: p.y-4-Math.random()*48,
+        vx: -p.vx*.12 + (Math.random()-.5)*12,
+        vy: -55-Math.random()*75,
+        age: 0,
+        life: .34+Math.random()*.34,
+        inward: false
+      })
+    }
+  }
+  for (let i=powerUpMotes.length-1; i>=0; i--) {
+    const mote = powerUpMotes[i]
+    mote.age += dt
+    if (mote.age >= mote.life) { powerUpMotes.splice(i,1); continue }
+    mote.x += mote.vx*dt
+    mote.y += mote.vy*dt
+    if (!mote.inward) mote.vy -= 12*dt
+  }
+  for (const spark of sparks) { spark.y -= dt * 18; spark.t -= dt }
+  while (sparks.length && sparks[0].t <= 0) sparks.shift()
+  // a câmera segue o Edu pela carreta (com dois jogadores, o ponto médio entre os dois); no final, depois que ele desce, segue até o fim do desenho do pub
+  const focus = focusX()
+  if (onTruck) camera += (clamp(focus - cameraLeadNow(),0,endSeq && endSeq.free ? pubCameraEnd() : cameraMaxNow()) - camera) * Math.min(1,dt * 6)
+  else if (convoy) {   // a câmera abre a cena à frente do Edu, acompanha a carreta saindo e depois fica parada
+    if (convoy.phase !== 'exit' && convoy.phase !== 'done') {
+      const lead = width < wideWidth ? 50 : 110   // na tela estreita o Edu fica mais perto da borda para sobrar rua à frente
+      const target = convoy.phase === 'ride' ? players[0].x - lead : convoy.px - lead
+      camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
+    }
+  }
+  else camera += (clamp(focus - walkLead(),0,convoyWalk ? Infinity : end+50-width) - camera) * Math.min(1,dt * 6)
+  const nextProgress = finish ? 100 : Math.floor(clamp((front.x-70)/(goal-70),0,.99)*100)
+  if (!onTruck && nextProgress !== progress) {
+    progress = nextProgress
+    progressText.textContent = progress + '% DA FASE'
+  }
+}
+
+// Modo de 2 jogadores mais difícil: depois de 30% da fase, reforços também chegam pelas costas (pela borda esquerda da tela).
+let rearTimer = 9
+function updateRearGuard(dt, front) {
+  if (!twoPlayers || onTruck || convoy || finish) return
+  for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].rear && enemies[i].x < camera - 320) enemies.splice(i, 1)   // ficou muito para trás
+  if (progress < 30 || (front.x > bossArena && boss.hp > 0)) return
+  if ((rearTimer -= dt) > 0) return
+  const rearDrones = enemies.filter((e) => e.rear && e.hp > 0 && e.kind === 'drone').length, rearSoldiers = enemies.filter((e) => e.rear && e.hp > 0 && e.kind !== 'drone').length
+  if (rearDrones + rearSoldiers >= 3) { rearTimer = 3; return }
+  const late = clamp((progress - 30) / 70, 0, 1)             // quanto mais perto do fim, mais seguido
+  rearTimer = 12 - late * 5 + Math.random() * 3
+  const x = camera - 45
+  if (rearDrones < 1 && (Math.random() < .3 || rearSoldiers >= 2)) {   // drone entra voando pela esquerda
+    const enemy = createEnemy({ x, type: late > .6 && Math.random() < .5 ? 'heavyDrone' : 'drone', y: 150 })
+    enemy.glideTo = camera + 50 + Math.random() * 60
+    enemy.origin = enemy.glideTo
+    enemy.face = 1
+    enemy.rear = true
+    enemies.push(enemy)
     return
   }
-  const convoyActive = !!convoy && convoy.phase !== 'done'
-  if (lives === 0 || (finish && !endSeq && !convoyActive)) return
-  const scripted = !!endSeq || convoyActive   // nos finais da 2 e da 2.1 o Edu anda sozinho
-  const right = !scripted && active('ArrowRight','KeyD')
-  const left = !scripted && active('ArrowLeft','KeyA')
+  if (rearSoldiers >= 2) { rearTimer = 3; return }
+  // chão na borda esquerda; se for buraco, entra pelo fim do trecho de chão mais próximo à esquerda
+  let sx = x
+  if (!platforms.some(([px, py, w]) => py === groundY && x >= px && x < px + w)) {
+    const near = platforms.filter(([px, py, w]) => py === groundY && px + w <= x && x - (px + w) < 170).sort((a, b) => (b[0] + b[2]) - (a[0] + a[2]))[0]
+    if (!near) { rearTimer = 1.5; return }
+    sx = near[0] + near[2] - 14
+  }
+  const enemy = createEnemy({ x: sx, type: late > .5 && Math.random() < .4 ? 'elite' : 'patrol', min: Math.min(camera - 70, sx - 10), max: camera + width + 40, y: groundY })
+  enemy.face = 1
+  enemy.route = 1
+  enemy.delay = .9
+  enemy.rear = true
+  enemies.push(enemy)
+}
+
+// Um passo de um jogador (o "player" da vez): pulo, corrida, queda no buraco, checkpoints, itens, final da fase e tiro.
+function stepPlayer(dt, pad, scripted, convoyActive) {
+  const cs = controlSets[player.idx]
+  const right = !scripted && active(...cs.right)
+  const left = !scripted && active(...cs.left)
   const direction = scripted ? (endSeq ? endSeq.dir : 0) : right || left ? Number(right) - Number(left) : pad.direction
-  const wantsCrouch = !scripted && (active('ArrowDown','KeyS') || pad.crouch)
-  if (!scripted && (jumpPressed || pad.jump)) player.buffer = 0.13
-  if (convoyActive && convoy.jump) { player.buffer = 0.13; convoy.jump = false }
-  jumpPressed = false
+  const wantsCrouch = !scripted && (active(...cs.down) || pad.crouch)
+  if (!scripted && (player.jumpPressed || pad.jump)) player.buffer = 0.13
+  if (convoyActive && convoy.jump && player === players[0]) { player.buffer = 0.13; convoy.jump = false }
+  player.jumpPressed = false
   player.buffer -= dt
   player.coyote = player.grounded ? 0.09 : player.coyote - dt
   if (player.buffer > 0 && player.coyote > 0) {
@@ -1424,11 +1771,12 @@ function update(dt) {
   }
   const oldY = player.y
   player.x = onTruck ? clamp(player.x + player.vx * dt,fase21.bounds[0],endSeq && endSeq.free ? Infinity : fase21.bounds[1]) : clamp(player.x + player.vx * dt,14,convoyActive ? Infinity : walkEnd)
+  if (players.length > 1 && !scripted) player.x = clamp(player.x, camera + 10, camera + width - 10)   // com dois jogadores ninguém sai da tela
   player.vy += 790 * dt
   player.y += player.vy * dt
   player.grounded = false
   landOnPlatform(player, oldY, 7, true)
-  if (player.grounded) playerLevelY = player.y
+  if (player.grounded) player.levelY = player.y
   if (player.y > 295) {
     loseLife()
     return
@@ -1449,8 +1797,8 @@ function update(dt) {
     if (pickup.taken || Math.abs(player.x-pickup.x) > 14 || pickup.y < player.y-62 || pickup.y > player.y+4) continue
     pickup.taken = true
     gameFx.collect({ x: pickup.x, y: pickup.y - 10 })
-    if (lives < maxLives) {
-      lives++
+    if (player.lives < maxLives) {
+      player.lives++
       announce('VIDA EXTRA',1.4)
       sfx.play('extraLife')
     } else {
@@ -1462,8 +1810,7 @@ function update(dt) {
   for (const powerUp of powerUps) {
     if (powerUp.taken || Math.abs(player.x-powerUp.x) > 16 || powerUp.y < player.y-64 || powerUp.y > player.y+5) continue
     powerUp.taken = true
-    powerUpVisual = powerUpDuration
-    powerUpMotes.length = 0
+    player.powerVisual = powerUpDuration
     for (let i=0; i<30; i++) {
       const angle = i/30*Math.PI*2 + (i%3)*.12
       const radius = 30 + (i%7)*4
@@ -1482,6 +1829,7 @@ function update(dt) {
   }
   if (player.x >= finishX && boss.hp === 0 && (!heliBoss || boss.heli.gone) && !finish && player.grounded) {
     finish = true
+    takeLead(player)   // quem chega primeiro conduz as cenas finais; o outro jogador acompanha
     if (stage === 2 && !onTruck) startConvoy()   // Fase 2: três caminhonetes fecham a rua e a Carreta Furação abre caminho
     else outSeq = { t: 0, banner: false, wiped: false }
   }
@@ -1490,11 +1838,11 @@ function update(dt) {
     if (Math.random() < dt * 15) sparks.push({x:player.x-player.face*7,y:player.y-2,t:.19})
   } else if (player.grounded) player.phase = 0
   player.cooldown -= dt
-  player.trigger = !scripted && (active('KeyG') || pad.fire)
-  if (!player.trigger) shotTick = 0
+  player.trigger = !scripted && (active(...cs.fire) || pad.fire)
+  if (!player.trigger) player.shotTick = 0
   if (player.trigger && player.cooldown <= 0) {
     player.cooldown = fireInterval
-    if (shotTick++ % bulletEvery === 0) {
+    if (player.shotTick++ % bulletEvery === 0) {
       const [muzzleX,muzzleY] = playerPose().muzzle
       // a bala nasce na ponta que se vê da arma (o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano)
       shots.push({x:player.x + player.face * muzzleX * heroVisualScale,y:player.y + muzzleY * heroVisualScale + (Math.random()*2-1)*fireSpread,dx:player.face,t:shotLife()})
@@ -1503,60 +1851,16 @@ function update(dt) {
   }
   const idle = player.grounded && player.vx === 0 && direction === 0 &&
     player.crouch === 0 && !player.trigger && player.cooldown <= 0
-  idleTime = idle ? idleTime + dt : 0
-  if (!finish) updateCombat(dt)
-  if (onTruck) updateWaves(dt)
-  const firing = player.trigger && lives > 0 && !finish && !playerFall ? playerPose().muzzle : null
-  // o Edu é desenhado heroVisualScale vezes maior que as coordenadas do cano: o clarão acompanha a ponta que se vê
-  gameFx.muzzle(firing ? { x: player.x + player.face*firing[0]*heroVisualScale, floor: player.y, height: -firing[1]*heroVisualScale, flip: player.face < 0, scale: charScale, casingFloor: groundBelow(player.x, player.y) - player.y - .5 } : null)
-  gameFx.update(dt)
-  for (let i=droneExplosions.length-1; i>=0; i--) {
-    const explosion = droneExplosions[i]
-    explosion.fx.update(dt)
-    if (explosion.fx.done()) droneExplosions.splice(i,1)
-  }
-  if (powerUpVisual > 0) {
-    const age = powerUpDuration-powerUpVisual
-    powerUpVisual = Math.max(0,powerUpVisual-dt)
-    const intensity = Math.min(1,age/.16) * Math.min(1,powerUpVisual/.58)
-    if (age > .24 && Math.random() < dt*(20+18*intensity)) {
-      const side = Math.random() < .5 ? -1 : 1
-      powerUpMotes.push({
-        x: player.x + side*(8+Math.random()*12),
-        y: player.y-4-Math.random()*48,
-        vx: -player.vx*.12 + (Math.random()-.5)*12,
-        vy: -55-Math.random()*75,
-        age: 0,
-        life: .34+Math.random()*.34,
-        inward: false
-      })
-    }
-  }
-  for (let i=powerUpMotes.length-1; i>=0; i--) {
-    const mote = powerUpMotes[i]
-    mote.age += dt
-    if (mote.age >= mote.life) { powerUpMotes.splice(i,1); continue }
-    mote.x += mote.vx*dt
-    mote.y += mote.vy*dt
-    if (!mote.inward) mote.vy -= 12*dt
-  }
-  for (const spark of sparks) { spark.y -= dt * 18; spark.t -= dt }
-  while (sparks.length && sparks[0].t <= 0) sparks.shift()
-  // a câmera segue o Edu pela carreta; no final, depois que ele desce, segue até o fim do desenho do pub (e ele sai de tela)
-  if (onTruck) camera += (clamp(player.x - cameraLeadNow(),0,endSeq && endSeq.free ? pubCameraEnd() : cameraMaxNow()) - camera) * Math.min(1,dt * 6)
-  else if (convoy) {   // a câmera abre a cena à frente do Edu, acompanha a carreta saindo e depois fica parada
-    if (convoy.phase !== 'exit' && convoy.phase !== 'done') {
-      const lead = width < wideWidth ? 50 : 110   // na tela estreita o Edu fica mais perto da borda para sobrar rua à frente
-      const target = convoy.phase === 'ride' ? player.x - lead : convoy.px - lead
-      camera += (Math.max(0,target) - camera) * Math.min(1,dt * 3)
-    }
-  }
-  else camera += (clamp(player.x - walkLead(),0,convoyWalk ? Infinity : end+50-width) - camera) * Math.min(1,dt * 6)
-  const nextProgress = finish ? 100 : Math.floor(clamp((player.x-70)/(goal-70),0,.99)*100)
-  if (!onTruck && nextProgress !== progress) {
-    progress = nextProgress
-    progressText.textContent = progress + '% DA FASE'
-  }
+  player.idleTime = idle ? player.idleTime + dt : 0
+}
+// o jogador que chegou ao fim da fase passa a ser o primeiro da lista (o líder das cenas finais)
+function takeLead(p) {
+  players.splice(players.indexOf(p), 1)
+  players.unshift(p)
+}
+// nas cenas finais (carreta, caminhonetes) o segundo jogador acompanha o líder, um pouco atrás
+function followLead(p, lead) {
+  Object.assign(p, { x: lead.x - 26, y: lead.y, vx: lead.vx, vy: lead.vy, face: lead.face, grounded: lead.grounded, mover: lead.mover, phase: lead.phase, crouch: 0, trigger: false, coyote: lead.coyote })
 }
 
 // Grunhido para perda de vida; grito mais intenso para game over.
@@ -1599,7 +1903,7 @@ function groundBelow(x, y) {
 }
 
 function hitPlayer() {
-  if (invulnerability > 0) return false
+  if (player.inv > 0) return false
   loseLife()
   return true
 }
@@ -1724,36 +2028,39 @@ restartButton.onclick = () => {
   goToStage(null, { autostart: !noContinues })   // reiniciar: já começa jogando na Fase 1; sem continues: tela inicial
 }
 function loseLife() {
-  lives--
+  player.lives--
   shots.length = 0
   enemyShots.length = 0
   pendingShotAt = -Infinity
-  jumpPressed = false
+  player.jumpPressed = false
   const belowMap = player.y > 295
-  playerFall = { age: 0, belowMap }
-  playDeathSound(lives === 0)
+  player.fall = { age: 0, belowMap }
+  playDeathSound(players.every((p) => p.lives === 0))
   if (belowMap) completePlayerFall()
 }
 
 function updatePlayerFall(dt) {
-  playerFall.age += dt
+  player.fall.age += dt
   if (!player.grounded) {
     const previousY = player.y
     player.vy += 790 * dt
     player.y += player.vy * dt
     landOnPlatform(player, previousY, 7, true)
   }
-  if (playerFall.age >= fallDuration) completePlayerFall()
+  if (player.fall.age >= fallDuration) completePlayerFall()
 }
 
 function completePlayerFall() {
-  if (lives === 0) {
-    playerFall.age = fallDuration
-    showGameOver()
+  const p = player
+  if (p.lives === 0) {
+    p.fall.age = fallDuration
+    if (players.every((q) => q.lives === 0)) showGameOver()   // só há fim de jogo quando todos ficaram sem vidas
     return
   }
-  reset(false)
-  bossHud.hidden = true
+  // o parceiro ainda joga: volta ao lado dele, sem reiniciar o trecho; se não, todos que restam voltam ao checkpoint
+  const mate = players.find((q) => q !== p && !q.fall && q.lives > 0)
+  if (mate) { respawnPlayer(p, mate.x, Math.min(mate.y, groundY) - 30, false); player = p }
+  else { reset(false); bossHud.hidden = true }
 }
 
 function landOnPlatform(actor, previousY, radius, withMovers = false) {
@@ -1938,7 +2245,7 @@ function stepChapolimLeap(enemy, dt) {
       // fixa o alvo: o ponto da plataforma do Edu onde ele está agora (a marca no chão avisa)
       enemy.special = 'hang'; enemy.specialAge = 0
       enemy.landX = clamp(player.x, enemy.min, enemy.max)
-      enemy.landY = playerLevelY
+      enemy.landY = player.levelY
     }
   } else if (enemy.special === 'hang') {
     enemy.x = enemy.landX
@@ -1968,13 +2275,13 @@ const quakeRing = { time: .45, jumpClear: 16, radius: (age) => 6 + 46 * (1 - Mat
 // estão no mesmo andar. Edu mais alto: vai até a plataforma que o aproxima mais do andar dele e pula nela.
 // Edu mais baixo: anda até a ponta da plataforma em que está e cai.
 function meleeNav(enemy) {
-  const diff = playerLevelY - enemy.y
+  const diff = player.levelY - enemy.y
   if (Math.abs(diff) < 30) return null
   if (diff < 0) {
     let best = null
     for (const [x, y, w] of platforms) {
       if (y >= enemy.y - 8 || enemy.y - y > 52) continue
-      if (!best || Math.abs(y - playerLevelY) < Math.abs(best.y - playerLevelY)) best = { x, y, w }
+      if (!best || Math.abs(y - player.levelY) < Math.abs(best.y - player.levelY)) best = { x, y, w }
     }
     if (!best) return null
     const inside = enemy.x > best.x + 6 && enemy.x < best.x + best.w - 6
@@ -2179,14 +2486,19 @@ function updateBombs(dt) {
     b.x += b.vx * dt
     b.y += b.vy * dt
     b.rot = Math.sin(elapsed * 6 + b.x) * .08   // cai reta, balançando só um pouco
-    const hitBody = Math.abs(b.x - player.x) < 11 && b.y >= player.y - 58 * charScale && b.y <= player.y
-    if (b.y < groundY - 2 && !hitBody) continue
+    const victims = alivePlayers()
+    const direct = victims.find((p) => Math.abs(b.x - p.x) < 11 && b.y >= p.y - 58 * charScale && b.y <= p.y)
+    if (b.y < groundY - 2 && !direct) continue
     bombs.splice(i, 1)
     if (b.col) b.col.done = true
     const floor = Math.min(b.y, groundY)
     gameFx.bomb({ x: b.x, floor, size: .6 })
     sfx.play('heavyBlast', { dx: b.x - player.x })
-    if (!finish && (hitBody || (Math.abs(player.x - b.x) < 30 && player.y > groundY - 22))) hitPlayer()
+    if (!finish) {
+      const lead = player
+      for (const p of victims) if (p === direct || (Math.abs(p.x - b.x) < 30 && p.y > groundY - 22)) { player = p; hitPlayer() }
+      player = lead
+    }
   }
 }
 function drawBombs(scroll) {
@@ -2315,7 +2627,7 @@ function updateHeli(dt, bossActive) {
   const dying = h.phase === 'dying'
   const flyby = h.phase === 'leave' || h.phase === 'warn' || h.phase === 'strafe'
   if (!dying) {
-    if (!h.cameo) player.x = clamp(player.x, bossArena - 20, bossArena + 430)   // a arena: ele não deixa o Edu passar nem voltar
+    if (!h.cameo) for (const p of players) p.x = clamp(p.x, bossArena - 20, bossArena + 430)   // a arena: ele não deixa o Edu passar nem voltar
     for (const e of enemies) if (e.heli && e.hp > 0) { e.min = player.x - 300; e.max = player.x + 300 }   // os chamados correm até o Edu
     if (flyby) { /* o voo lateral controla a posição abaixo */ } else {
     const exposed = h.phase === 'dive' || h.phase === 'exposed'
@@ -2470,7 +2782,8 @@ function firstShotHit(shot, travel, bossActive) {
 }
 
 function updateCombat(dt) {
-  invulnerability -= dt
+  const targets = alivePlayers()
+  const front = player   // o líder (já escolhido por quem chamou)
   while (impacts.length && elapsed-impacts[0].at >= impactDuration) impacts.shift()
   const bossActive = player.x > bossArena && boss.hp > 0 && !finish
   if (heliBoss) { updateHeli(dt, bossActive); updateBombs(dt) }
@@ -2485,8 +2798,9 @@ function updateCombat(dt) {
       enemyShots.push({x:boss.x+ox,y:boss.y+oy,vx:-118})
     }
   }
-  if (!heliBoss && boss.hp > 0 && player.x > boss.x-40) player.x = boss.x-40
-  const playerTop = player.y - (player.crouch > .6 ? 40 : 58) * charScale
+  if (!heliBoss && boss.hp > 0) for (const p of targets) if (p.x > boss.x-40) p.x = boss.x-40
+  const topOf = (p) => p.y - (p.crouch > .6 ? 40 : 58) * charScale
+  const nearest = (x) => targets.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a), targets[0] ?? front)
   for (const enemy of enemies) {
     enemy.hitKick = (enemy.hitKick || 0) * Math.max(0,1-dt*15)
     enemy.hitKickY = (enemy.hitKickY || 0) * Math.max(0,1-dt*18)
@@ -2496,13 +2810,16 @@ function updateCombat(dt) {
       continue
     }
     if (enemy.fleeing) { updateFlee(enemy, dt); continue }
+    if (enemy.rear && enemy.kind === 'patrol') { enemy.min = Math.min(camera - 70, enemy.x); enemy.max = camera + width + 40 }   // reforço das costas: acompanha a câmera
+    player = nearest(enemy.x)   // cada inimigo mira o jogador mais próximo
+    const playerTop = topOf(player)
     const distance = player.x - enemy.x
     const config = enemyTypes[enemy.type]
     if (enemy.kind === 'patrol' || enemy.kind === 'melee') {
       const struck = enemy.kind === 'melee' ? updateMelee(enemy,distance,config,dt) : (updatePatrol(enemy,distance,config,dt), false)
-      if (struck && hitPlayer()) return
+      if (struck && hitPlayer()) continue
       // encostar mata nos soldados; o Fofão só machuca com a faca (golpes e investida): sem dano de contato
-      if (enemy.kind === 'patrol' && Math.abs(player.x-enemy.x) < 15*charScale && player.y > enemy.y-56*charScale && playerTop < enemy.y && hitPlayer()) return
+      if (enemy.kind === 'patrol' && Math.abs(player.x-enemy.x) < 15*charScale && player.y > enemy.y-56*charScale && playerTop < enemy.y && hitPlayer()) continue
       continue
     }
     const eliteDrone = enemy.type === 'heavyDrone'
@@ -2557,6 +2874,7 @@ function updateCombat(dt) {
     }
   }
 
+  player = front
   for (let i = shots.length-1; i >= 0; i--) {
     const shot = shots[i]
     const travel = Math.min(dt,shot.t)*430
@@ -2609,38 +2927,46 @@ function updateCombat(dt) {
     const shot = enemyShots[i]
     shot.x += shot.vx * dt
     shot.y += (shot.vy ?? 0) * dt
-    const contact = Math.abs(shot.x-player.x) < 9*charScale && shot.y >= playerTop && shot.y <= player.y
-    if (contact || shot.y > height || shot.x < player.x-520 || shot.x > player.x+520) enemyShots.splice(i,1)
-    if (contact && hitPlayer()) return
+    const victim = targets.find((p) => Math.abs(shot.x-p.x) < 9*charScale && shot.y >= topOf(p) && shot.y <= p.y)
+    if (victim || shot.y > height || shot.x < front.x-520 || shot.x > front.x+520) enemyShots.splice(i,1)
+    if (victim) {
+      player = victim
+      const hurt = hitPlayer()
+      player = front
+      if (hurt) break   // quem perde a vida limpa a lista de tiros inimigos: o laço termina aqui
+    }
   }
   bossMeter.value = boss.hp
   bossHud.hidden = !bossActive || boss.hp === 0
 }
 
 function playerPose() {
-  if (playerFall) {
-    const frame = Math.min(sequences.playerFall.count - 1, Math.floor(playerFall.age / fallFrameDuration))
-    return { sheet: 'playerFall', frame }
+  // o conjunto do personagem (o do Operador só vale se as folhas dele foram carregadas)
+  const set = player.character === 'operativo' && heroSets.operativo && sprites.op_run ? heroSets.operativo : heroSets.edu
+  const s = set.prefix
+  if (player.fall) {
+    const frame = Math.min(sequences.playerFall.count - 1, Math.floor(player.fall.age / fallFrameDuration))
+    return { sheet: s + 'playerFall', frame }
   }
   const holdingAim = player.trigger || player.cooldown > 0
   if (player.crouch > 0) {
-    if (holdingAim) return { sheet: 'crouch', frame: 2, muzzle: crouchFireMuzzle }
-    return { sheet: 'crouch', frame: player.crouch < .6 ? 0 : 1 }
+    if (holdingAim) return { sheet: s + 'crouch', frame: 2, muzzle: set.crouch }
+    return { sheet: s + 'crouch', frame: player.crouch < .6 ? 0 : 1 }
   }
   if (!player.grounded) {
     // pulo: 0 subindo, 1 caindo, 2 e 3 os mesmos mirando; subindo, as pernas encolhem e o corpo sobe
     const rising = player.vy < 0
-    const lift = rising ? jumpTuckLift : 0
-    if (player.trigger || player.cooldown > .04) return { sheet: 'jump', frame: rising ? 2 : 3, lift, muzzle: jumpFireMuzzles[rising ? 0 : 1] }
-    return { sheet: 'jump', frame: rising ? 0 : 1, lift }
+    const lift = rising ? set.tuckLift : 0
+    if (player.trigger || player.cooldown > .04) return { sheet: s + 'jump', frame: rising ? 2 : 3, lift, muzzle: set.jump[rising ? 0 : 1] }
+    return { sheet: s + 'jump', frame: rising ? 0 : 1, lift }
   }
   if (Math.abs(player.vx) > 8) {
     const frame = Math.floor(player.phase)
-    if (player.trigger || player.cooldown > .04) return { sheet: 'runFire', frame, muzzle: runFireMuzzles[frame] }
-    return { sheet: 'run', frame }
+    if (player.trigger || player.cooldown > .04) return { sheet: s + 'runFire', frame, muzzle: set.runFire[frame] }
+    return { sheet: s + 'run', frame }
   }
-  if (holdingAim) return { sheet: 'idleFire', frame: 0, muzzle: idleFireMuzzle }
-  return { sheet: 'idle', frame: Math.floor(idleTime * breathingFps) % sequences.idle.count }
+  if (holdingAim) return { sheet: s + 'idleFire', frame: 0, muzzle: set.idleFire }
+  return { sheet: s + 'idle', frame: Math.floor(player.idleTime * breathingFps) % sequences.idle.count }
 }
 
 function fill(context,color,x,y,w,h) {
@@ -2854,7 +3180,7 @@ function drawEnemies(scroll) {
   if (heliBoss) { drawBombs(scroll); drawHeli(scroll); return }
   const x = boss.x-scroll
   if (boss.hp <= 0 || x < -90 || x > width+90) return
-  const warning = player.x > bossArena && boss.delay <= .36
+  const warning = players.some((p) => p.x > bossArena) && boss.delay <= .36
   const firing = boss.volley > 0 && boss.delay > (boss.hp <= bossHp/2 ? .68 : 1.11)
   const low = (boss.volley - Number(firing)) % 2 === 1
   const frame = warning || firing ? (low ? 2 : 1) : 0
@@ -3121,15 +3447,16 @@ function drawPowerUpPickup(powerUp,scroll) {
   }
 }
 function drawPowerUpEffect(scroll,front=false) {
-  if (powerUpVisual <= 0 && powerUpMotes.length === 0) return
-  const age = powerUpDuration-powerUpVisual
-  const x = Math.round(player.x-scroll)
-  const y = Math.round(player.y)
-  const fadeIn = clamp(age/.16,0,1)
-  const fadeOut = clamp(powerUpVisual/.58,0,1)
-  const aura = fadeIn*fadeOut*(.8+.2*Math.sin(elapsed*13))
   ctx.save()
-  if (!front && aura > .02) {
+  if (!front) for (const p of players) {
+    if (p.powerVisual <= 0) continue
+    const age = powerUpDuration-p.powerVisual
+    const x = Math.round(p.x-scroll)
+    const y = Math.round(p.y)
+    const fadeIn = clamp(age/.16,0,1)
+    const fadeOut = clamp(p.powerVisual/.58,0,1)
+    const aura = fadeIn*fadeOut*(.8+.2*Math.sin(elapsed*13))
+    if (aura > .02) {
     ctx.globalCompositeOperation = 'lighter'
     ctx.globalAlpha = .12*aura
     fill(ctx,'#2290e6',x-22,y-67,44,65)
@@ -3145,6 +3472,7 @@ function drawPowerUpEffect(scroll,front=false) {
       const py = y-6-row*6
       fill(ctx,row%3===0 ? '#8ff0ff' : '#3fd0ff',x-half,py,2,3)
       fill(ctx,row%3===1 ? '#e0fcff' : '#2290e6',x+half-2,py-1,2,4)
+    }
     }
   }
   for (let i=0;i<powerUpMotes.length;i++) {
@@ -3217,6 +3545,26 @@ function drawWheelsAt(left, top, angle) {
     ctx.restore()
   })
 }
+const playerColors = ['#ffb35a', '#5ac8ff']   // seta sobre a cabeça: laranja = P1, azul = P2
+function drawPlayer(p) {
+  player = p
+  const pose = playerPose()
+  const showPlayer = p.fall ? !p.fall.belowMap : p.lives > 0 && (p.inv < .01 || Math.floor(p.inv*14)%2 === 0)
+  if (!showPlayer) return
+  const px = Math.round(p.x-camera), py = Math.round(p.y)
+  ctx.save()
+  ctx.translate(px,py)
+  ctx.scale(p.face * heroVisualScale,heroVisualScale)
+  heroAtlas(ctx,pose.sheet,pose.frame,0,-(pose.lift || 0),1/pixelScale)
+  ctx.restore()
+  if (players.length > 1 && !p.fall) {   // seta colorida sobre a cabeça: laranja = P1, azul = P2
+    const my = py - Math.round((p.crouch > .6 ? 62 : 84) * charScale), color = playerColors[p.idx]
+    fill(ctx,'#16091d',px-3,my-1,7,1)
+    fill(ctx,color,px-2,my,5,1)
+    fill(ctx,color,px-1,my+1,3,1)
+    fill(ctx,color,px,my+2,1,1)
+  }
+}
 function renderWorld() {
   const scroll = Math.round(camera)
   if (stage === 2) drawStage2Background()
@@ -3264,13 +3612,8 @@ function renderWorld() {
     ctx.restore()
   }
   drawPowerUpEffect(scroll,false)
-  const pose = playerPose()
-  ctx.save()
-  ctx.translate(Math.round(player.x-camera),Math.round(player.y))
-  ctx.scale(player.face * heroVisualScale,heroVisualScale)
-  const showPlayer = playerFall ? !playerFall.belowMap : lives > 0 && (invulnerability < .01 || Math.floor(invulnerability*14)%2 === 0)
-  if (showPlayer) heroAtlas(ctx,pose.sheet,pose.frame,0,-(pose.lift || 0),1/pixelScale)
-  ctx.restore()
+  for (const p of players) drawPlayer(p)
+  player = players[0]
   gameFx.draw(ctx,scroll)   // clarão do cano, faíscas e brilho de medalha (pixelfx)
   drawPowerUpEffect(scroll,true)
   if (onTruck) ctx.restore()
@@ -3302,17 +3645,20 @@ function idleFace(now) {
   return idleCurrent
 }
 function renderPlayerHud() {
-  const hurt = playerFall && !playerFall.belowMap
-  const face = hurt ? (playerFall.age < .16 ? 'shout' : 'pain') : idleFace(performance.now())
-  if (face !== hudFace) {
-    playerHud.dataset.face = face
-    hudFace = face
-  }
-  if (lives !== hudLives) {
-    livesText.setAttribute('aria-label', lives + (lives === 1 ? ' vida' : ' vidas'))
-    lifeMedals.forEach((medal, i) => medal.toggleAttribute('data-spent', i >= lives))
-    hudLives = lives
-  }
+  players.forEach((p, k) => {
+    const slot = hudSlots[k]
+    const hurt = p.fall && !p.fall.belowMap
+    const face = hurt ? (p.fall.age < .16 ? 'shout' : 'pain') : idleFace(performance.now())
+    if (face !== slot.face) {
+      slot.root.dataset.face = face
+      slot.face = face
+    }
+    if (p.lives !== slot.lives) {
+      slot.livesEl.setAttribute('aria-label', p.lives + (p.lives === 1 ? ' vida' : ' vidas'))
+      slot.medals.forEach((medal, n) => medal.toggleAttribute('data-spent', n >= p.lives))
+      slot.lives = p.lives
+    }
+  })
   if (score === hudScore) return
   const digits = String(score).padStart(5,'0')
   scoreDisplay.width = digits.length*6+1
@@ -3341,6 +3687,7 @@ function tick(now) {
 Promise.all([
   ...Object.entries(sequences).map(([name, { file }]) => loadImage(name,'assets/' + file)),
   loadImage('crouch','assets/edu-v2/agachamento.png'),
+  ...(testHost && operadorCfg ? Object.entries(operadorFiles).map(([name, file]) => loadImage('op_' + name, 'assets/operador/' + file + '?v=11')) : []),
   ...(stage === 2 ? [
     // faixas sem emenda montadas por tools/montar_fase2.py
     loadImage('sky2','assets/fase2/ceu-predios-continuo.webp'),
@@ -3369,7 +3716,14 @@ Promise.all([
   updateMovers()
   let autostart = null
   try { autostart = sessionStorage.getItem('bulletz.autostart'); sessionStorage.removeItem('bulletz.autostart') } catch {}
-  setMode('title')   // numa troca de fase o menu da instância anterior pode ter ficado aberto
+  let skipSelect = false
+  try { skipSelect = sessionStorage.getItem('bulletz.skipSelect') === '1'; sessionStorage.removeItem('bulletz.skipSelect') } catch {}
+  const testShortcut = ['fase', 'boss', 'fim'].some((k) => new URLSearchParams(location.search).has(k))
+  if (autostart || skipSelect || testShortcut) { selectDone = true; playersDone = true }
+  let afterPlayers = false
+  try { afterPlayers = sessionStorage.getItem('bulletz.afterPlayers') === '1'; sessionStorage.removeItem('bulletz.afterPlayers') } catch {}
+  setMode('title')
+  if (afterPlayers && testHost) { playersDone = true; selectReturn = 'play'; openSelect() }   // o número de jogadores mudou (recarregou): segue direto para a escolha de personagem   // numa troca de fase o menu da instância anterior pode ter ficado aberto
   if (!autostart && !onTruck && stage === 1) { try { sessionStorage.removeItem('bulletz.continues') } catch {} }   // partida nova: 3 continues
   if (autostart) {
     startGame()
@@ -3392,7 +3746,7 @@ Promise.all([
   if (new URLSearchParams(location.search).has('debug')) {
     const debugParams = new URLSearchParams(location.search)
     window.bulletz = {
-      player, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms, waveState, suspension,
+      get player() { return players[0] }, players, enemies, boss, movers, pickups, powerUps, droneExplosions, platforms, waveState, suspension,
       get finish() { return finish },
       get endSeq() { return endSeq },
       get outSeq() { return outSeq },
@@ -3403,10 +3757,11 @@ Promise.all([
       endStage() { finish = true; outSeq = { t: 0, banner: false, wiped: false } },
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },
-      get lives() { return lives }, set lives(v) { lives = v },
+      get lives() { return players[0].lives }, set lives(v) { for (const p of players) p.lives = v },
       get weather() { return weather }, set weather(v) { weather = v },
       get rain() { return rainAmount },
-      get god() { return invulnerability > 1e5 }, set god(v) { invulnerability = v ? 1e9 : 0 },
+      get god() { return players[0].inv > 1e5 }, set god(v) { for (const p of players) p.inv = v ? 1e9 : 0 },
+      set rearTimer(v) { rearTimer = v },
       warp(x) { respawnX = x; reset(false); respawnX = Math.max(...[70, ...checkpoints].filter(c => c <= x)) }
     }
     const debugWarp = Number(debugParams.get('warp'))
