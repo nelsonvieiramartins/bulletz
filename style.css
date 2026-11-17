@@ -265,3 +265,30 @@ body[data-mode=title] .player-hud.p2,body[data-mode=select] .player-hud.p2{opaci
 .select-go{margin-top:clamp(8px,1.8cqw,24px);padding:0;border:0;background:none;cursor:pointer;width:clamp(120px,19cqw,260px);filter:drop-shadow(0 0 12px #ff9a3c88);transition:transform .15s,filter .15s}
 .select-go img{display:block;width:100%;height:auto}
 .select-go:hover,.select-go:focus-visible{outline:none;transform:scale(1.06);filter:drop-shadow(0 0 18px #ffb35ccc)}
+
+/* MODO JOGADOR (versão publicada): a pausa mostra só a logo, "JOGO EM PAUSA", CONTINUAR, SAIR e o áudio */
+.pause-title{display:none}
+.menu.player-mode .menu-head>div{display:none}
+.menu.player-mode .pause-title{display:block;font:900 clamp(16px,2.6cqw,30px)/1 var(--mono);letter-spacing:.2em;color:#ffd9a0;text-shadow:0 2px 0 #3a1408,0 0 18px #ff9a3c66}
+.menu.player-mode .menu-actions{flex-direction:column;align-items:center;gap:10px;margin:14px 0}
+.menu.player-mode .menu-actions>*:not(#resume):not(#exit-menu){display:none}
+.menu.player-mode #resume,.menu.player-mode #exit-menu{width:min(260px,70%);aspect-ratio:520/140;padding:0;border:0;box-shadow:none;animation:none;background:transparent center/contain no-repeat;font-size:0;color:transparent;text-shadow:none;cursor:pointer;filter:drop-shadow(0 0 10px #ff9a3c55)}
+.menu.player-mode #resume{background-image:url(assets/selecionar/botao-continuar.png)}
+.menu.player-mode #exit-menu{background-image:url(assets/selecionar/botao-sair.png)}
+.menu.player-mode #resume:hover,.menu.player-mode #exit-menu:hover,.menu.player-mode #resume:focus-visible,.menu.player-mode #exit-menu:focus-visible{filter:drop-shadow(0 0 16px #ffb35ccc) brightness(1.08);outline:none;transform:scale(1.04)}
+.menu.player-mode .menu-section:not(.menu-audio){display:none}
+.menu.player-mode .menu-audio summary,.menu.player-mode .menu-audio .music-row>span{display:none}
+.menu.player-mode .menu-audio .music-row{justify-content:center}
+
+/* MODO JOGADOR: tela de pausa organizada em coluna centralizada; o destaque do botão segue o contorno da arte (sem retângulo) */
+.menu.player-mode .menu-panel{width:min(420px,100%);padding:26px 24px 22px;text-align:center}
+.menu.player-mode .menu-head{flex-direction:column;justify-content:center;gap:12px;margin-bottom:18px}
+.menu.player-mode .menu-logo{width:min(190px,60%);height:auto}
+.menu.player-mode .pause-title{text-align:center;letter-spacing:.22em;padding-left:.22em}
+.menu.player-mode .menu-actions{gap:6px;margin:0 0 16px}
+.menu.player-mode #resume,.menu.player-mode #exit-menu,.menu.player-mode .menu-actions button.sel{border:0;border-radius:0;box-shadow:none;outline:none;background-color:transparent}
+.menu.player-mode .menu-actions button.sel,.menu.player-mode #resume:focus,.menu.player-mode #exit-menu:focus{filter:drop-shadow(0 0 3px #fff6) drop-shadow(0 0 14px #ffb35ccc) brightness(1.1);transform:scale(1.05)}
+.menu.player-mode .menu-section.menu-audio{border-top:1px solid var(--line);margin:0;padding:16px 0 0}
+.menu.player-mode .menu-audio .music-row{margin:0;gap:12px 14px}
+#menu.player-mode .menu-actions button,#menu.player-mode .menu-actions button:focus,#menu.player-mode .menu-actions button:focus-visible,#menu.player-mode .menu-actions button:hover{outline:none!important;box-shadow:none!important;border:0!important;border-radius:0}
+#menu.player-mode #resume.sel,#menu.player-mode #exit-menu.sel,#menu.player-mode #resume:focus-visible,#menu.player-mode #exit-menu:focus-visible,#menu.player-mode #resume:hover,#menu.player-mode #exit-menu:hover{filter:drop-shadow(0 0 3px #fff7) drop-shadow(0 0 14px #ffb35ccc) brightness(1.1);transform:scale(1.05)}

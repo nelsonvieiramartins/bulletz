@@ -386,6 +386,7 @@ const startX = onTruck ? fase21.startX : 70
 // Todo o estado de cada um fica no próprio objeto. "player" é o jogador da vez: o laço de atualização o troca para cada jogador e a IA
 // dos inimigos o aponta para o jogador mais próximo, então o código antigo (que lê "player") continua valendo sem reescrever.
 const testHost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || new URLSearchParams(location.search).has('debug')
+document.querySelector('#menu')?.classList.toggle('player-mode', !testHost)   // MODO JOGADOR: pausa enxuta na versão publicada
 const twoPlayers = testHost && new URLSearchParams(location.search).get('jogadores') === '2'
 const makePlayer = (idx) => ({
   idx, x: Math.max(14, startX - idx * 26), y: groundY, vx: 0, vy: 0, face: 1, grounded: true, coyote: 0.09, buffer: 0, phase: 0, cooldown: 0, crouch: 0, trigger: false, mover: null,
