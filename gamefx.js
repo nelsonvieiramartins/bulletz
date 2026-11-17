@@ -19,6 +19,7 @@ import * as levelUp from './vendor/pixelfx/src/fx/ui/level-up.js'
 import * as cannonball from './vendor/pixelfx/src/fx/projectiles/cannonball.js'
 import * as smallExplosion from './vendor/pixelfx/src/fx/explosions/small-explosion.js'
 import * as bigExplosion from './vendor/pixelfx/src/fx/explosions/big-explosion.js'
+import * as rain from './vendor/pixelfx/src/fx/weather/rain.js?v=2'
 import * as campfire from './vendor/pixelfx/src/fx/fire/campfire.js'
 import * as critHit from './vendor/pixelfx/src/fx/impacts/crit-hit.js'
 
@@ -57,7 +58,14 @@ export function createGameFx(width, height) {
   const bannerFrame = createFrame(480, 270)
   const bannerScale = Math.min(1, (width / 480) * 1.02)
   const tipOrigin = [100, 100]
-
+  // chuva por cima de toda a tela (rain do pixelfx, só as gotas): uma camada a cada 320 de largura, caindo até o chão da tela
+  const rainFrame = createFrame(width, height)
+  const rainCanvas = document.createElement('canvas')
+  rainCanvas.width = width
+  rainCanvas.height = height
+  const rainContext = rainCanvas.getContext('2d')
+  const rainImage = rainContext.createImageData(width, height)
+  const rainFx = (width > 360 ? [0.25, 0.75] : [0.5]).map((u, i) => createFx(rain, { x: Math.round(width * u), y: height - 8, seed: 4 + i * 7, bare: true, reach: height - 8, density: 1 }))
   return {
     /** Faísca onde o tiro acertou. x,y = ponto do acerto; floor = pés do alvo; dx = direção do tiro (1 ou -1). */
     hit({ x, y, floor, dx }) {
@@ -198,6 +206,20 @@ export function createGameFx(width, height) {
         fx.update(dt)
         if (fx.done()) oneShots.splice(i, 1)
       }
+    },
+    /** Anda a chuva. */
+    updateRain(dt) { for (const fx of rainFx) fx.update(dt) },
+    /** Desenha a chuva (já com a escala do jogo). amount = 0 a 1: a quantidade de gotas e a opacidade. */
+    drawRain(ctx, amount) {
+      if (amount < .03) return
+      clearFrame(rainFrame)
+      for (const fx of rainFx) { fx.options.density = .2 + amount * 1.1; fx.draw(rainFrame, 'back'); fx.draw(rainFrame, 'front') }
+      composite(rainFrame, rainImage.data, null)
+      rainContext.putImageData(rainImage, 0, 0)
+      ctx.save()
+      ctx.globalAlpha = Math.min(1, .35 + amount * .65)
+      ctx.drawImage(rainCanvas, 0, 0)
+      ctx.restore()
     },
     clear() {
       oneShots.length = 0

@@ -1,6 +1,6 @@
 import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js'
-import { createGameFx } from './gamefx.js?v=2'
+import { createGameFx } from './gamefx.js?v=5'
 import { applySpriteConfig } from './spriteconfig.js'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js'
@@ -365,6 +365,11 @@ let zoneIndex = 0
 let finish = false
 // Fase 2.1: a rua passa sozinha (roadPos anda com roadSpeed). No final a carreta freia até parar na porta do Vikings Pub (endSeq).
 let roadPos = 0, roadSpeed = onTruck ? fase21.speed : 0, wheelAngle = 0
+// Fase 2.1: o tempo vai fechando a cada onda (0 = entardecer limpo, 1 = tudo escuro, dessaturado e com chuva forte)
+let weather = 0, rainAmount = 0
+// Por onda (índice = onda atual, de 0 a 6): quanto o céu escurece e quanto chove. A chuva começa fraca na onda 2, chega ao ápice na 5 e vai acabando na 6.
+const weatherByWave = [0, .1, .3, .5, .75, 1, .55]
+const rainByWave = [0, 0, .25, .5, .75, 1, 0]
 let endSeq = null, endGround = null
 let previewPlaying = true
 let previewSequence = 'run'
@@ -649,6 +654,8 @@ const afterimages = []      // imagens que ficam para trás na investida especia
 let fofaoSpecialReadyAt = 9 // quando o próximo especial pode começar (fofaoSpecial.firstAt, mais abaixo, no reinício)
 const waveState = { index: 0, pending: [], clearedAt: null }
 function resetWaves() {
+  weather = 0
+  rainAmount = 0
   waveState.index = 0
   waveState.pending.length = 0
   waveState.clearedAt = null
@@ -1365,6 +1372,11 @@ function update(dt) {
   if (outSeq) updateStageOut(dt)
   if (onTruck) {
     if (endSeq) updateEnding(dt)
+    const wi = Math.min(waveState.index, weatherByWave.length - 1)
+    weather += (weatherByWave[wi] - weather) * Math.min(1, dt * .35)   // muda devagar, em uns 6-8 s depois de cada onda
+    const rainTarget = rainByWave[wi]
+    rainAmount += (rainTarget - rainAmount) * Math.min(1, dt * (rainTarget > rainAmount ? .4 : .22))   // sobe em uns 5-8 s e some mais devagar ainda
+    gameFx.updateRain(dt)
     roadPos += roadSpeed * dt
     wheelAngle += roadSpeed / fase21.speed * fase21.wheelSpin * dt
     updateSuspension(dt)
@@ -2969,10 +2981,27 @@ function heroAtlas(context,sheet,index,x,y,scale) {
   const { w, h, anchorX, feetY } = heroCell
   context.drawImage(sprites[sheet],(index%4)*w,Math.floor(index/4)*h,w,h,x-anchorX*scale,y-feetY*scale,w*scale,h*scale)
 }
+// Tempo fechando: tira a cor (saturation com cinza) e escurece com um azul-acinzentado (multiply), tudo proporcional a "weather"
+function drawWeatherGrade() {
+  ctx.save()
+  ctx.globalCompositeOperation = 'saturation'
+  ctx.globalAlpha = weather * .75
+  ctx.fillStyle = '#808080'
+  ctx.fillRect(0, 0, width, height)
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.globalAlpha = weather * .8
+  ctx.fillStyle = '#6b7088'
+  ctx.fillRect(0, 0, width, height)
+  ctx.restore()
+}
 function render() {
   ctx.save()
   ctx.scale(pixelScale,pixelScale)
   renderWorld()
+  if (onTruck) {   // o tempo fecha e a chuva cai por cima de tudo
+    if (weather > .02) drawWeatherGrade()
+    gameFx.drawRain(ctx, rainAmount)
+  }
   if ((endSeq && endSeq.wiped) || (outSeq && outSeq.wiped)) {   // a tela fecha: vidro por cima; quando ele estoura, por baixo só há escuro
     if (gameFx.wipeTime > 1.5) { ctx.fillStyle = '#050408'; ctx.fillRect(0,0,width,height) }
     gameFx.drawWipe(ctx,width,height)
@@ -3375,6 +3404,8 @@ Promise.all([
       startEnding() { finish = true; startEnding() },
       get camera() { return camera },
       get lives() { return lives }, set lives(v) { lives = v },
+      get weather() { return weather }, set weather(v) { weather = v },
+      get rain() { return rainAmount },
       get god() { return invulnerability > 1e5 }, set god(v) { invulnerability = v ? 1e9 : 0 },
       warp(x) { respawnX = x; reset(false); respawnX = Math.max(...[70, ...checkpoints].filter(c => c <= x)) }
     }

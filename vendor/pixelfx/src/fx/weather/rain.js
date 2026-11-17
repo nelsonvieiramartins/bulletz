@@ -18,8 +18,13 @@ export const meta = {
     palette: ["#0e1322", "#1a2440", "#283a5e", "#3a5482", "#5674a8", "#84a6d6", "#c0dcf8", "#f2f8ff"],
     density: 1,
     seed: 4,
+    bare: false, // so as gotas (sem a neblina, o chao molhado e a nevoa baixa)
+    reach: 172, // de que altura as gotas caem (acima da origem)
   },
 };
+
+// com a opcao reach a area de recorte cresce para a altura da queda (senao a chuva so apareceria nos 180 de altura do efeito)
+const tall = (o) => (o.bare && o.reach > 172 ? { ...meta, size: [meta.size[0], o.reach + 10], origin: [meta.origin[0], o.reach] } : meta);
 
 const D = 8, SLANT = -0.2, UX = SLANT / Math.hypot(SLANT, 1), UY = 1 / Math.hypot(SLANT, 1);
 // the depths, far to near: how many, falls a loop (speed), streak length, colors (tail, body, head), where
@@ -42,8 +47,12 @@ const poolAt = (P, x, y) => P.find((p) => x >= p.x0 + 2 && x <= p.x1 - 2 && Math
 
 export function drawBack(p, t, o) {
   t = Math.round(t * 3e4) / 3e4;
-  const q = clip(p, meta), S = o.seed, C = fit(o.palette, 8), P = pools(S);
+  const q = clip(p, tall(o)), S = o.seed, C = fit(o.palette, 8), P = pools(S);
   // an overcast haze, thicker toward the ground, that hides the stars
+  if (o.bare) {
+    for (let L = 0; L < 3; L++) layer(q, t, S, C, P, L, o.density, o.reach);
+    return;
+  }
   const haze = mix(C[0], C[1], 0.6);
   pass(p, meta, -170, -0.5, (x, y, out) => {
     out.c = haze;
@@ -51,26 +60,26 @@ export function drawBack(p, t, o) {
     out.b = 1;
   });
   floor(q, t, S, C, P);
-  for (let L = 0; L < 3; L++) layer(q, t, S, C, P, L, o.density);
+  for (let L = 0; L < 3; L++) layer(q, t, S, C, P, L, o.density, o.reach);
   mist(p, t, S, C);
 }
 
 export function draw(p, t, o) {
   t = Math.round(t * 3e4) / 3e4;
-  const q = clip(p, meta), S = o.seed, C = fit(o.palette, 8), P = pools(S);
-  layer(q, t, S, C, P, 3, o.density);
+  const q = clip(p, tall(o)), S = o.seed, C = fit(o.palette, 8), P = pools(S);
+  layer(q, t, S, C, P, 3, o.density, o.reach);
 }
 
 // one depth of rain: each slot falls a whole number of times a loop, somewhere new each time
-function layer(q, t, S, C, P, L, density) {
+function layer(q, t, S, C, P, L, density, reach = 172) {
   const Ly = LAYERS[L], sd = S * 11 + L, [c0, c1, c2] = Ly.col.map((i) => C[i]), len = Ly.len;
-  const n = Math.round(Ly.n * density), G = field(S + 21, 256, 128, [4, 8, 16]), sweep = (256 * t) / D;
+  const n = Math.round(Ly.n * density * (reach / 172)), G = field(S + 21, 256, 128, [4, 8, 16]), sweep = (256 * t) / D;
   trips(t, D, n, sd, Ly.m[0], Ly.m[1], (u, k, m, i) => {
     const j = wrap(k, m);
     // gusts: sheets of heavier and lighter rain sweep across with the wind
     if (L < 2 && rand(sd, i, j, 7) > 0.35 + 1.3 * (sample(G, (-166 + rand(sd, i, j, 2) * 332) * 0.8 + sweep, 9 + L * 40) - 0.32)) return;
     const end = Ly.z ? Ly.z[0] + rand(sd, i, j, 1) * (Ly.z[1] - Ly.z[0]) : Ly.stop[0] + rand(sd, i, j, 1) * (Ly.stop[1] - Ly.stop[0]);
-    const y0 = -172 - len, y = y0 + (end - y0) * u, x = -166 + rand(sd, i, j, 2) * 332 - (end - y) * SLANT;
+    const y0 = -reach - len, y = y0 + (end - y0) * u, x = -166 + rand(sd, i, j, 2) * 332 - (end - y) * SLANT;
     // far drops thin out before they end; near ones are whole
     const a = Ly.z ? 1 : Math.min(1, (1 - u) * 5);
     if (len <= 2) q.dot(x, y, c2, a), q.dot(x - UX, y - UY, c1, a * 0.8);
