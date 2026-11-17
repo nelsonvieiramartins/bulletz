@@ -296,3 +296,17 @@ body[data-mode=title] .player-hud.p2,body[data-mode=select] .player-hud.p2{opaci
 .menu.player-mode .menu-audio .music-row{margin:0;gap:12px 14px}
 #menu.player-mode .menu-actions button,#menu.player-mode .menu-actions button:focus,#menu.player-mode .menu-actions button:focus-visible,#menu.player-mode .menu-actions button:hover{outline:none!important;box-shadow:none!important;border:0!important;border-radius:0}
 #menu.player-mode #resume:hover,#menu.player-mode #exit-menu:hover{filter:brightness(1.1)}   /* o selecionado ganha o contorno no formato da arte (#menu-cursor.shape) */
+
+/* Carregamento: cobre tudo até a arte estar pronta (início, troca de fase, troca de tela) */
+#loader{position:fixed;inset:0;z-index:1100;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#050408;color:#ffd9a0;font:700 clamp(14px,1.6vw,20px) var(--mono,monospace);letter-spacing:.3em;text-align:center;padding:0 16px;cursor:progress}
+html.booting #loader,html.screen-loading #loader{display:flex}
+html.screen-loading:not(.booting) #loader{background:#050408d9}
+html.booting,html.screen-loading{cursor:progress}
+.loader-spin{width:clamp(44px,5vw,64px);height:clamp(44px,5vw,64px);border:5px solid #ffb35a33;border-top-color:#ffb35a;border-right-color:#ff7a45;border-radius:50%;animation:loader-spin .8s linear infinite;filter:drop-shadow(0 0 8px #ff9a3c88)}
+.loader-bar{width:min(320px,70vw);height:8px;background:#ffb35a22;border:1px solid #ffb35a55;overflow:hidden}
+.loader-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff7a45,#ffe7a6);transition:width .15s linear}
+.loader-pct{font-size:.75em;letter-spacing:.2em;opacity:.7}
+#loader.failed .loader-spin{animation:none;border-color:#ff5a5a}
+#loader.failed .loader-text{color:#ff9a9a}
+@keyframes loader-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.loader-spin{animation-duration:2.4s}}

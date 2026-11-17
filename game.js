@@ -35,6 +35,7 @@ function goToStage(fase, { autostart = true, extra = {} } = {}) {
   const url = location.pathname + (params.toString() ? '?' + params.toString() : '')
   history.replaceState(null, '', url)
   try { if (autostart) sessionStorage.setItem('bulletz.autostart', '1'); else sessionStorage.removeItem('bulletz.autostart') } catch {}
+  document.documentElement.classList.add('booting')   // CARREGANDO até a nova instância ter toda a arte
   if (autostart) document.documentElement.classList.add('stage-loading')   // preto enquanto a nova fase carrega
   else { try { sessionStorage.setItem('bulletz.skipSelect', '1') } catch {} }   // o SAIR volta direto à tela inicial
   disposeInstance()
@@ -650,13 +651,59 @@ window.addEventListener('keydown', enableSound)
 window.addEventListener('pointerdown', enableSound)
 window.addEventListener('pointerup', enableSound)
 
-function loadImage(key, url) {
-  return new Promise((resolve, reject) => {
+// Carregamento: nada é mostrado antes de todas as imagens estarem baixadas e decodificadas. O #loader (CARREGANDO + barra) cobre
+// a tela no início, nas trocas de fase (html.booting) e em qualquer troca de tela cuja arte ainda não chegou (html.screen-loading).
+const loaderEl = document.querySelector('#loader')
+const loadCount = { total: 0, done: 0 }
+function showLoadProgress() {
+  if (!loaderEl) return
+  const pct = loadCount.total ? Math.round(loadCount.done / loadCount.total * 100) : 0
+  loaderEl.querySelector('.loader-bar i').style.width = pct + '%'
+  loaderEl.querySelector('.loader-pct').textContent = pct + '%'
+}
+function trackLoad(promise) { loadCount.total++; showLoadProgress(); return promise.finally(() => { loadCount.done++; showLoadProgress() }) }
+const decodeImage = (image) => (image.decode ? image.decode().catch(() => {}) : Promise.resolve())
+function preloadUrl(url) {
+  return trackLoad(new Promise((resolve) => {
     const image = new Image()
-    image.onload = () => { sprites[key] = image; resolve() }
+    image.onload = () => decodeImage(image).then(resolve)
+    image.onerror = () => { console.warn('imagem não carregou:', url); resolve() }
+    image.src = url
+  }))
+}
+// espera as <img> de um trecho da página (telas de seleção, botões, HUD) terminarem de baixar e decodificar
+function waitImages(root) {
+  return Promise.all([...root.querySelectorAll('img')].map((img) => img.complete ? decodeImage(img)
+    : new Promise((done) => { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }) }).then(() => decodeImage(img))))
+}
+// imagens usadas pelo style.css (botões em arte, fundos): lidas das próprias regras, para nada aparecer pela metade
+function cssImageUrls() {
+  const urls = new Set()
+  const walk = (rules, base) => {
+    for (const rule of rules) {
+      if (rule.cssRules) walk(rule.cssRules, base)
+      for (const m of (rule.cssText || '').matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
+        if (/\.(png|webp|jpe?g|gif|svg)(\?|$)/i.test(m[1]) && !m[1].startsWith('data:')) urls.add(new URL(m[1], base).href)
+      }
+    }
+  }
+  for (const sheet of document.styleSheets) { try { walk(sheet.cssRules, sheet.href || location.href) } catch {} }
+  return [...urls]
+}
+// troca de tela: se a arte da próxima tela ainda não chegou, mostra o CARREGANDO por cima até ela estar pronta
+function ensureScreenReady(root) {
+  if (!root || ![...root.querySelectorAll('img')].some((img) => !img.complete)) return
+  const html = document.documentElement
+  html.classList.add('screen-loading')
+  waitImages(root).then(() => html.classList.remove('screen-loading'))
+}
+function loadImage(key, url) {
+  return trackLoad(new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => { sprites[key] = image; decodeImage(image).then(resolve) }
     image.onerror = () => reject(new Error(url))
     image.src = url
-  })
+  }))
 }
 
 function announce(message, duration) {
@@ -1053,6 +1100,7 @@ function setMode(next) {
   selectScreen.hidden = next !== 'select'
   playersScreen.hidden = next !== 'players'
   menuScreen.hidden = next !== 'menu'
+  ensureScreenReady({ title: titleScreen, select: selectScreen, players: playersScreen, menu: menuScreen }[next])
   if (next === 'title') hideGameOver()
   keys.clear()
   for (const p of players) p.jumpPressed = false
@@ -1443,6 +1491,7 @@ function confirmPlayers() {
   const u = new URL(location.href)
   if (playersSel === 1) u.searchParams.set('jogadores', '2'); else u.searchParams.delete('jogadores')
   try { sessionStorage.setItem('bulletz.afterPlayers', '1') } catch {}
+  document.documentElement.classList.add('screen-loading')   // CARREGANDO enquanto a página recarrega com o novo número de jogadores
   location.href = u.href
 }
 playersScreen.querySelector('.select-go').addEventListener('click', () => { if (mode === 'players') confirmPlayers() })
@@ -3722,7 +3771,13 @@ Promise.all([
   loadImage('droneDeath','assets/drone-padrao-destruicao.png'),
   loadImage('eliteDroneDeath','assets/drone-elite-destruicao.png'),
   loadImage('boss','assets/o-cobrador.png'),
-  loadImage('medal','assets/medalha-bulletz.png')
+  loadImage('medal','assets/medalha-bulletz.png'),
+  // arte das telas e dos botões: <img> do index.html, imagens do style.css, contornos do seletor e retratos do HUD do Operador
+  trackLoad(waitImages(document)),
+  ...cssImageUrls().map(preloadUrl),
+  ...['iniciar', 'continuar', 'reiniciar', 'botao-continuar', 'botao-sair'].map((n) => preloadUrl('assets/botoes/' + n + '-contorno.png?v=3')),
+  ...[...new Set(Object.values(portraitSources))].map((n) => preloadUrl('assets/selecionar/' + n + '.png?v=2')),
+  trackLoad(document.fonts ? document.fonts.ready : Promise.resolve())
 ]).then(() => {
   updateMovers()
   let autostart = null
@@ -3734,7 +3789,8 @@ Promise.all([
   let afterPlayers = false
   try { afterPlayers = sessionStorage.getItem('bulletz.afterPlayers') === '1'; sessionStorage.removeItem('bulletz.afterPlayers') } catch {}
   setMode('title')
-  if (afterPlayers) { playersDone = true; selectReturn = 'play'; openSelect() }   // o número de jogadores mudou (recarregou): segue direto para a escolha de personagem   // numa troca de fase o menu da instância anterior pode ter ficado aberto
+  if (afterPlayers) { playersDone = true; selectReturn = 'play'; openSelect() }
+  document.documentElement.classList.remove('booting', 'screen-loading')   // tudo carregado: some o CARREGANDO   // o número de jogadores mudou (recarregou): segue direto para a escolha de personagem   // numa troca de fase o menu da instância anterior pode ter ficado aberto
   if (!autostart && !onTruck && stage === 1) { try { sessionStorage.removeItem('bulletz.continues') } catch {} }   // partida nova: 3 continues
   if (autostart) {
     startGame()
@@ -3793,6 +3849,8 @@ Promise.all([
   }
   renderPlayerHud()
   requestAnimationFrame(tick)
-}).catch(() => {
+}).catch((error) => {
+  console.error('Falha ao carregar a arte:', error)
+  if (loaderEl) { loaderEl.classList.add('failed'); loaderEl.querySelector('.loader-text').textContent = 'FALHA AO CARREGAR · RECARREGUE A PÁGINA' }
   announce('Falha ao carregar a arte. Recarregue a página.',Infinity)
 })
