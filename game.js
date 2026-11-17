@@ -387,7 +387,7 @@ const startX = onTruck ? fase21.startX : 70
 // dos inimigos o aponta para o jogador mais próximo, então o código antigo (que lê "player") continua valendo sem reescrever.
 const testHost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || new URLSearchParams(location.search).has('debug')
 document.querySelector('#menu')?.classList.toggle('player-mode', !testHost)   // MODO JOGADOR: pausa enxuta na versão publicada
-const twoPlayers = testHost && new URLSearchParams(location.search).get('jogadores') === '2'
+const twoPlayers = new URLSearchParams(location.search).get('jogadores') === '2'
 const makePlayer = (idx) => ({
   idx, x: Math.max(14, startX - idx * 26), y: groundY, vx: 0, vy: 0, face: 1, grounded: true, coyote: 0.09, buffer: 0, phase: 0, cooldown: 0, crouch: 0, trigger: false, mover: null,
   lives: maxLives, inv: 0, fall: null, levelY: groundY /* chão em que pisou por último; os Fofões se orientam por ele */, jumpPressed: false, shotTick: 0, idleTime: 0, powerVisual: 0
@@ -1065,8 +1065,8 @@ function enterFullscreen() {
 }
 // A seleção de personagem vem depois do INICIAR JOGO (só na versão de teste). Fica de fora nas trocas de fase, nos atalhos de teste
 // (?fase, ?boss, ?fim) e quando a página foi recarregada pelos seletores do modo de teste.
-let selectDone = !testHost
-let playersDone = !testHost   // 1 ou 2 jogadores (vem antes da escolha de personagem)
+let selectDone = false
+let playersDone = false   // 1 ou 2 jogadores (vem antes da escolha de personagem)
 let selectReturn = 'play'
 function startGame() {
   if (mode !== 'title') return
@@ -1411,7 +1411,6 @@ try {
   const saved = JSON.parse(sessionStorage.getItem('bulletz.chars') ?? 'null')
   if (Array.isArray(saved) && characters.includes(saved[0])) chosenP1 = characters.indexOf(saved[0])
 } catch {}
-if (!testHost) chosenP1 = 0   // na versão publicada só o Edu
 function applyCharacters() {
   players.forEach((p, i) => {
     p.character = characters[i === 0 ? chosenP1 : 1 - chosenP1]
@@ -3697,7 +3696,7 @@ function tick(now) {
 Promise.all([
   ...Object.entries(sequences).map(([name, { file }]) => loadImage(name,'assets/' + file)),
   loadImage('crouch','assets/edu-v2/agachamento.png'),
-  ...(testHost && operadorCfg ? Object.entries(operadorFiles).map(([name, file]) => loadImage('op_' + name, 'assets/operador/' + file + '?v=11')) : []),
+  ...(operadorCfg ? Object.entries(operadorFiles).map(([name, file]) => loadImage('op_' + name, 'assets/operador/' + file + '?v=11')) : []),
   ...(stage === 2 ? [
     // faixas sem emenda montadas por tools/montar_fase2.py
     loadImage('sky2','assets/fase2/ceu-predios-continuo.webp'),
@@ -3733,7 +3732,7 @@ Promise.all([
   let afterPlayers = false
   try { afterPlayers = sessionStorage.getItem('bulletz.afterPlayers') === '1'; sessionStorage.removeItem('bulletz.afterPlayers') } catch {}
   setMode('title')
-  if (afterPlayers && testHost) { playersDone = true; selectReturn = 'play'; openSelect() }   // o número de jogadores mudou (recarregou): segue direto para a escolha de personagem   // numa troca de fase o menu da instância anterior pode ter ficado aberto
+  if (afterPlayers) { playersDone = true; selectReturn = 'play'; openSelect() }   // o número de jogadores mudou (recarregou): segue direto para a escolha de personagem   // numa troca de fase o menu da instância anterior pode ter ficado aberto
   if (!autostart && !onTruck && stage === 1) { try { sessionStorage.removeItem('bulletz.continues') } catch {} }   // partida nova: 3 continues
   if (autostart) {
     startGame()
