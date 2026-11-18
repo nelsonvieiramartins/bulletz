@@ -20,8 +20,7 @@ const STORAGE = 'bulletz.controles'
 const cloneKeys = (k) => Object.fromEntries(ACTIONS.map(([a]) => [a, [...k[a]]]))
 const validKeys = (k) => k && typeof k === 'object' && ACTIONS.every(([a]) => Array.isArray(k[a]) && k[a].length && k[a].every((c) => typeof c === 'string' && c.length < 24))
 const validBinding = (b) => b && ((b.type === 'button' && Number.isInteger(b.index) && b.index >= 0 && b.index < 64) ||
-  (b.type === 'axis' && Number.isInteger(b.index) && b.index >= 0 && b.index < 16 && (b.sign === 1 || b.sign === -1)))
-const validMap = (m) => m && typeof m === 'object' && ACTIONS.every(([a]) => m[a] === undefined || validBinding(m[a]))
+  (b.type === 'axis' && Number.isInteger(b.index) && b.index >= 0 && b.index < 16 && (b.sign === 1 || b.sign === -1) && Number.isFinite(b.rest) && Math.abs(b.rest) <= 1))
 
 export function loadControls() {
   const cfg = { keys: [null, null], pad: [{ device: 'auto', map: null }, { device: 'auto', map: null }] }
@@ -32,7 +31,11 @@ export function loadControls() {
       const p = saved.pad?.[i]
       if (p) {
         if (typeof p.device === 'string' && p.device.length < 200) cfg.pad[i].device = p.device
-        if (validMap(p.map) && p.map && Object.keys(p.map).length) cfg.pad[i].map = Object.fromEntries(Object.entries(p.map).filter(([, b]) => b))
+        // só entram os comandos válidos (um comando antigo ou estragado é descartado sem perder os outros)
+        if (p.map && typeof p.map === 'object') {
+          const m = Object.fromEntries(ACTIONS.filter(([a]) => validBinding(p.map[a])).map(([a]) => [a, p.map[a]]))
+          if (Object.keys(m).length) cfg.pad[i].map = m
+        }
       }
     }
   } catch {}
@@ -76,10 +79,13 @@ export function padName(pad) {
 export function bindingValue(pad, b, deadzone = .35) {
   if (!pad || !b) return 0
   if (b.type === 'button') return pad.buttons[b.index]?.pressed ? 1 : 0
+  // eixo: conta a partir do repouso que foi lido na captura (gatilhos analógicos repousam em -1: sem isso ficariam "apertados" sozinhos)
   const v = pad.axes[b.index]
   if (!Number.isFinite(v) || Math.abs(v) > 1) return 0
-  const d = v * b.sign
-  return d > deadzone ? Math.min(1, (d - deadzone) / (1 - deadzone)) : 0
+  const span = Math.abs((b.sign > 0 ? 1 : -1) - (b.rest ?? 0))
+  if (span < .5) return 0   // o repouso já está no extremo desse lado: comando inválido
+  const d = (v - (b.rest ?? 0)) * b.sign
+  return d > deadzone * span ? Math.min(1, (d - deadzone * span) / (span * (1 - deadzone))) : 0
 }
 /** Procura o primeiro comando acionado agora (botão apertado ou eixo empurrado), para a captura. baseline = eixos em repouso. */
 export function pressedBinding(pad, baseline) {
@@ -87,7 +93,7 @@ export function pressedBinding(pad, baseline) {
   if (button >= 0) return { type: 'button', index: button }
   for (let i = 0; i < pad.axes.length; i++) {
     const v = pad.axes[i] - (baseline?.[i] ?? 0)
-    if (Math.abs(v) > .7 && Math.abs(pad.axes[i]) <= 1) return { type: 'axis', index: i, sign: v > 0 ? 1 : -1 }
+    if (Math.abs(v) > .7 && Math.abs(pad.axes[i]) <= 1) return { type: 'axis', index: i, sign: v > 0 ? 1 : -1, rest: Math.round((baseline?.[i] ?? 0) * 100) / 100 }
   }
   return null
 }

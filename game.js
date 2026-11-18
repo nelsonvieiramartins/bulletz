@@ -2,7 +2,7 @@ import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js?v=2'
 import { createGameFx } from './gamefx.js?v=14'
 import { applySpriteConfig } from './spriteconfig.js?v=2'
-import { loadControls, saveControls, effectiveKeys, keyLabel, assignPads, bindingValue } from './controles.js'
+import { loadControls, saveControls, effectiveKeys, keyLabel, assignPads, bindingValue } from './controles.js?v=2'
 import { createOptions } from './opcoes.js'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js?v=2'
@@ -1665,10 +1665,14 @@ applyCharacters()
 renderSelect()
 
 // Tela OPÇÕES (botão da tela inicial): detecta os controles e mapeia os comandos do P1 e do P2; vale na hora e fica guardado no navegador
+// Ao voltar da tela OPÇÕES o toque que a fechou (botão A, Enter, Espaço) não pode virar um comando da tela inicial (nunca inicia o jogo):
+// por uma folga curta o título ignora confirmar, e a seleção volta para o botão OPÇÕES.
+let titleGuardUntil = 0
+let pendingTitleSel = null
 const options = createOptions({
   root: optionsScreen, cfg: controlConfig, save: saveControls, getPads: connectedPads, getTwoPlayers: () => twoPlayers,
   onChange: applyControlConfig,
-  onClose: () => setMode('title')
+  onClose: () => { titleGuardUntil = performance.now() + 600; pendingTitleSel = 1; setMode('title') }
 })
 select('#options-btn').addEventListener('click', () => { if (mode === 'title') { setMode('options'); options.open() } })
 window.addEventListener('keydown', (event) => {
@@ -1728,7 +1732,8 @@ function updatePaused(dt) {
     previewFrame = Math.floor(previewTime)
   }
   if (mode === 'options') { options.tick(dt); return }   // a tela OPÇÕES lê os controles por conta própria
-  const pad = readPad(dt)
+  const pad = readPad(dt)   // (lê também durante a folga, para o botão ainda apertado não virar um "novo" aperto depois)
+  if (mode === 'title' && performance.now() < titleGuardUntil) return
   if (mode === 'select' || mode === 'players') { selectPadInput(pad); return }
   if (mode === 'menu' || mode === 'title') { if (menuPadInput(pad)) return }   // no menu de pausa e na tela inicial o controle anda pelos botões
   if (!pad.restart) return
@@ -2125,7 +2130,12 @@ function confirmMenu() {
 function updateMenuCursor() {
   const items = menuItems()
   const key = items.length ? (!gameOverScreen.hidden ? 'gameover' : mode === 'title' ? 'title' : 'menu') : null
-  if (key !== menuKey) { menuKey = key; menuSel = 0; if (items[0]) items[0].focus({ preventScroll: true }) }   // abre sempre no primeiro botão
+  if (key !== menuKey) {   // abre sempre no primeiro botão (a tela inicial, ao voltar de OPÇÕES, abre no OPÇÕES)
+    menuKey = key
+    menuSel = key === 'title' && pendingTitleSel !== null ? Math.min(pendingTitleSel, items.length - 1) : 0
+    if (key === 'title') pendingTitleSel = null
+    if (items[menuSel]) items[menuSel].focus({ preventScroll: true })
+  }
   menuCursor.hidden = !key || (key === 'gameover' && !gameOverScreen.classList.contains('ready'))   // no fim de jogo só depois que os botões surgem
   if (!items.length) return
   menuSel = Math.min(menuSel, items.length - 1)
@@ -2168,7 +2178,7 @@ window.addEventListener('keydown', (event) => {
   const prev = ['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'], next = ['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS']
   if (prev.includes(event.code)) moveMenu(-1)
   else if (next.includes(event.code)) moveMenu(1)
-  else if (['Enter', 'NumpadEnter', 'Space'].includes(event.code)) confirmMenu()
+  else if (['Enter', 'NumpadEnter', 'Space'].includes(event.code)) { if (!(mode === 'title' && (event.repeat || performance.now() < titleGuardUntil))) confirmMenu() }
   else return
   event.preventDefault()
   event.stopImmediatePropagation()

@@ -1,7 +1,7 @@
 // Tela OPÇÕES: detecta os controles ligados ao computador e mapeia os comandos do P1 e do P2 (teclado e controle).
 // O jogo cria a tela com createOptions() e a liga a três pontos: handleKey(event) (teclado), tick(dt) (a cada quadro, para ler os controles) e
 // onChange() (avisa que a configuração mudou, para o jogo aplicá-la na hora).
-import { ACTIONS, DEFAULT_KEYS, RESERVED_KEYS, effectiveKeys, keyLabel, bindingLabel, padName, assignPads, pressedBinding, bindingValue } from './controles.js'
+import { ACTIONS, DEFAULT_KEYS, RESERVED_KEYS, effectiveKeys, keyLabel, bindingLabel, padName, assignPads, pressedBinding, bindingValue } from './controles.js?v=2'
 
 export function createOptions({ root, cfg, save, getPads, getTwoPlayers, onChange, onClose }) {
   const listen = { target: null, ready: false, baseline: null, wait: 0 }   // captura em andamento: { slot, kind: 'key' | 'pad', action }
