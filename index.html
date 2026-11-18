@@ -14,8 +14,8 @@
 <script>try{if(localStorage.getItem('bulletz.modoCelular')==='1'&&['localhost','127.0.0.1','[::1]'].indexOf(location.hostname)>=0)document.documentElement.classList.add('modo-celular')}catch(e){}</script>
 <script>document.documentElement.classList.add('booting')</script>
 <script>try{if(sessionStorage.getItem('bulletz.autostart'))document.documentElement.classList.add('stage-loading');setTimeout(function(){document.documentElement.classList.remove('stage-loading')},10000)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=60">
-<script type="module" src="game.js?v=249"></script>
+<link rel="stylesheet" href="style.css?v=62">
+<script type="module" src="game.js?v=252"></script>
 </head>
 <body data-mode="title">
 <div id="loader" role="status" aria-live="polite"><span class="loader-spin" aria-hidden="true"></span><span class="loader-text">CARREGANDO</span><span class="loader-bar" aria-hidden="true"><i></i></span><span class="loader-pct">0%</span></div>
@@ -83,6 +83,7 @@
     <section id="title-screen" class="overlay title-screen" aria-label="Tela inicial">
       <img class="title-logo" src="assets/logo-bulletz.png" alt="BULLETZ — Divorced Dad Rock">
       <button id="start" type="button" class="start-button art-btn art-iniciar">INICIAR JOGO</button>
+      <button id="options-btn" type="button" class="art-btn art-opcoes">OPÇÕES</button>
       <nav class="title-links" aria-label="Ferramentas de teste">
         <button type="button" class="t-tools-toggle" aria-expanded="false">Teste</button>
         <label>Fase <select class="t-fase" aria-label="Fase"><option value="1">1 · A Cidade dos Boletos</option><option value="2">2 · Av. T-9, Goiânia</option><option value="2.1">2.1 · A Carreta</option></select></label>
@@ -94,6 +95,8 @@
       </nav>
       <p id="ios-hint" class="title-hint ios-hint" hidden>TELA CHEIA NO iPHONE: TOQUE EM COMPARTILHAR <span aria-hidden="true">⎙</span> E EM “ADICIONAR À TELA DE INÍCIO”</p>
     </section>
+
+    <section id="options-screen" class="overlay options-screen" aria-label="Opções" hidden></section>
 
     <section id="gameover" class="overlay gameover" aria-label="Fim de jogo" hidden>
       <img class="gameover-title" src="assets/fim-de-jogo.png" alt="FIM DE JOGO">

@@ -2,6 +2,8 @@ import createSpriteFusionExplosion from './effects/spritefusion-explosion.js'
 import { sfx } from './sfx.js?v=2'
 import { createGameFx } from './gamefx.js?v=14'
 import { applySpriteConfig } from './spriteconfig.js?v=2'
+import { loadControls, saveControls, effectiveKeys, keyLabel, assignPads, bindingValue } from './controles.js'
+import { createOptions } from './opcoes.js'
 import { fase2 } from './fase2.js?v=3'
 import { fase21 } from './fase21.js?v=2'
 import { createMidiPlayer } from './midiplayer.js'
@@ -412,10 +414,36 @@ const players = [makePlayer(0)]
 if (twoPlayers) players.push(makePlayer(1))
 let player = players[0]
 // Teclado: no modo de 1 jogador tudo como sempre; com 2, o P1 usa A/D/W/S (G atira) e o P2 as setas (L ou Numpad 1/4 atiram; seta para cima ou Numpad 0 pulam)
-const controlSets = twoPlayers
-  ? [{ left: ['KeyA'], right: ['KeyD'], down: ['KeyS'], jump: ['Space', 'KeyW'], fire: ['KeyG'] },
-     { left: ['ArrowLeft'], right: ['ArrowRight'], down: ['ArrowDown'], jump: ['ArrowUp', 'Numpad0'], fire: ['KeyL', 'Numpad1', 'Numpad4'] }]
-  : [{ left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'], down: ['ArrowDown', 'KeyS'], jump: ['Space', 'ArrowUp', 'KeyW'], fire: ['KeyG'] }]
+// As teclas vêm da tela OPÇÕES (controles.js: padrão do modo ou o que o jogador mapeou); applyControlConfig() preenche e reaplica quando muda.
+const controlConfig = loadControls()
+const controlSets = twoPlayers ? [{}, {}] : [{}]
+const keyHtml = (codes) => codes.map((c) => '<kbd>' + keyLabel(c) + '</kbd>').join('/')
+let twoPlayersNote = null
+function applyControlConfig() {
+  controlSets.forEach((set, slot) => {
+    const k = effectiveKeys(controlConfig, slot, twoPlayers)
+    for (const a of ['left', 'right', 'down', 'jump', 'fire']) set[a] = k[a]
+    for (const codes of Object.values(set)) for (const c of codes) keyboard.add(c)
+  })
+  if (twoPlayersNote) {
+    const t = (set) => `${keyHtml(set.left)} ${keyHtml(set.right)} mover, ${keyHtml(set.jump)} pular, ${keyHtml(set.down)} agachar, ${keyHtml(set.fire)} atirar`
+    twoPlayersNote.innerHTML = `<b>2 JOGADORES</b> · P1 (laranja): ${t(controlSets[0])} · P2 (azul): ${t(controlSets[1])} · o 1º controle é do P1 e o 2º do P2 (ajuste em OPÇÕES)`
+  }
+}
+applyControlConfig()
+// Controles ligados ao computador, e os comandos de controle personalizados do jogador slot sobre o que o jogo leu (direction, jumpHeld, fireHeld, crouch)
+const connectedPads = () => { try { return canReadPads ? Array.from(navigator.getGamepads()).filter((p) => p?.connected) : [] } catch { return [] } }
+function customizePad(slot, pad, base) {
+  const cm = controlConfig.pad[slot].map
+  if (!cm) return base
+  const v = (b) => bindingValue(pad, b)
+  let direction = base.direction
+  if (cm.left || cm.right) {
+    const l = cm.left ? v(cm.left) : Math.max(0, -base.direction), r = cm.right ? v(cm.right) : Math.max(0, base.direction)
+    direction = r - l
+  }
+  return { direction, jumpHeld: cm.jump ? v(cm.jump) > 0 : base.jumpHeld, fireHeld: cm.fire ? v(cm.fire) > 0 : base.fireHeld, crouch: cm.down ? v(cm.down) > 0 : base.crouch }
+}
 const alivePlayers = () => players.filter((p) => !p.fall && p.lives > 0)
 // A câmera segue o jogador mais à frente, mas TRAVA quando o de trás chega ao canto esquerdo da tela: o jogo só prossegue quando ele anda.
 const focusX = () => { const live = alivePlayers(); return live.length ? Math.max(...live.map((p) => p.x)) : players[0].x }
@@ -1152,6 +1180,7 @@ function setKey(key, active) {
 const titleScreen = select('#title-screen')
 const selectScreen = select('#select-screen')
 const playersScreen = select('#players-screen')
+const optionsScreen = select('#options-screen')
 const menuScreen = select('#menu')
 const fullscreenToggle = select('#fullscreen-toggle')
 let mode = 'title'
@@ -1165,6 +1194,7 @@ function setMode(next) {
   titleScreen.hidden = next !== 'title'
   selectScreen.hidden = next !== 'select'
   playersScreen.hidden = next !== 'players'
+  optionsScreen.hidden = next !== 'options'
   menuScreen.hidden = next !== 'menu'
   ensureScreenReady({ title: titleScreen, select: selectScreen, players: playersScreen, menu: menuScreen }[next])
   if (next === 'title') hideGameOver()
@@ -1264,10 +1294,6 @@ window.addEventListener('keydown', (event) => {
     if (mode === 'play') openMenu()
     else if (mode === 'menu') resumeGame()
     return
-  }
-  if (mode === 'title' && (event.code === 'Enter' || event.code === 'NumpadEnter' || event.code === 'Space') && !event.target.closest?.('button, a')) {
-    event.preventDefault()
-    startGame()
   }
 }, true)
 
@@ -1458,7 +1484,7 @@ function readPad(dt) {
     }
   }
   const pads = devices.filter((pad) => pad?.connected)
-  const pad = pads.find((device) => device.index === padIndex) ?? pads[0]
+  const pad = assignPads(controlConfig, pads)[0]   // o controle do P1 (automático: o primeiro; ou o escolhido em OPÇÕES)
   padSetup.hidden = !pad
   if (!pad) {
     padIndex = null
@@ -1486,7 +1512,8 @@ function readPad(dt) {
   const pressed = (button) => Boolean(pad.buttons[button]?.pressed)
   const jumpHeld = padProfile ? bindingAmount(pad, padProfile[2]) > 0 : pressed(padButtons.south)
   const fireHeld = padProfile ? bindingAmount(pad, padProfile[3]) > 0 : pressed(pad.buttons.length > 2 ? padButtons.west : 1)
-  const startUsed = padProfile?.some((binding) => binding.type === 'button' && binding.index === padButtons.start)
+  const startUsed = padProfile?.some((binding) => binding.type === 'button' && binding.index === padButtons.start) ||
+    Object.values(controlConfig.pad[0].map || {}).some((b) => b.type === 'button' && b.index === padButtons.start)
   const startHeld = !startUsed && pressed(padButtons.start)
   const left = pressed(padButtons.left)
   const right = pressed(padButtons.right)
@@ -1496,14 +1523,9 @@ function readPad(dt) {
   const direction = padProfile
     ? bindingAmount(pad, padProfile[1]) - bindingAmount(pad, padProfile[0])
     : left || right ? Number(right) - Number(left) : analog
-  const input = {
-    direction,
-    jump: jumpHeld && !padJumpHeld,
-    fire: fireHeld,
-    crouch: pressed(padButtons.down) || (pad.axes[1] > .64 && pad.axes[1] <= 1 && Math.abs(stick) < .5),
-    restart: startHeld && !padStartHeld
-  }
-  padJumpHeld = jumpHeld
+  const mixed = customizePad(0, pad, { direction, jumpHeld, fireHeld, crouch: pressed(padButtons.down) || (pad.axes[1] > .64 && pad.axes[1] <= 1 && Math.abs(stick) < .5) })
+  const input = { direction: mixed.direction, jump: mixed.jumpHeld && !padJumpHeld, fire: mixed.fireHeld, crouch: mixed.crouch, restart: startHeld && !padStartHeld }
+  padJumpHeld = mixed.jumpHeld
   padStartHeld = startHeld
   return input
 }
@@ -1642,13 +1664,27 @@ function selectPadInput(pad) {
 applyCharacters()
 renderSelect()
 
+// Tela OPÇÕES (botão da tela inicial): detecta os controles e mapeia os comandos do P1 e do P2; vale na hora e fica guardado no navegador
+const options = createOptions({
+  root: optionsScreen, cfg: controlConfig, save: saveControls, getPads: connectedPads, getTwoPlayers: () => twoPlayers,
+  onChange: applyControlConfig,
+  onClose: () => setMode('title')
+})
+select('#options-btn').addEventListener('click', () => { if (mode === 'title') { setMode('options'); options.open() } })
+window.addEventListener('keydown', (event) => {
+  if (mode !== 'options' || event.altKey || event.ctrlKey || event.metaKey) return
+  if (options.handleKey(event)) event.stopImmediatePropagation()
+}, true)
+
 // Menu de pausa: com 2 jogadores, lembra quem usa o quê
 if (twoPlayers) {
   const keysBox = document.querySelector('#menu .keys')
   const note = document.createElement('p')
   note.className = 'two-players-note'
+  twoPlayersNote = note
   note.innerHTML = '<b>2 JOGADORES</b> · P1 (laranja): <kbd>A</kbd> <kbd>D</kbd> mover, <kbd>W</kbd>/<kbd>Espaço</kbd> pular, <kbd>S</kbd> agachar, <kbd>G</kbd> atirar · P2 (azul): <kbd>←</kbd> <kbd>→</kbd> mover, <kbd>↑</kbd>/<kbd>Num 0</kbd> pular, <kbd>↓</kbd> agachar, <kbd>L</kbd>/<kbd>Num 1</kbd>/<kbd>Num 4</kbd> atirar · o 1º controle é do P1 e o 2º do P2'
   keysBox?.after(note)
+  applyControlConfig()
 }
 // Segundo controle (jogador 2): o primeiro controle é do P1 (readPad); o próximo conectado é do P2, no mapeamento padrão
 let pad2JumpHeld = false
@@ -1656,7 +1692,7 @@ let pad2StartHeld = false
 function readPad2() {
   let devices = []
   if (canReadPads) { try { devices = Array.from(navigator.getGamepads()) } catch { canReadPads = false } }
-  const pad = devices.filter((d) => d?.connected && d.index !== padIndex)[0]
+  const pad = assignPads(controlConfig, devices.filter((d) => d?.connected))[1]   // o controle do P2
   if (!pad || document.hidden) { pad2JumpHeld = pad2StartHeld = false; return neutralPad }
   const pressed = (button) => Boolean(pad.buttons[button]?.pressed)
   const jumpHeld = pressed(padButtons.south)
@@ -1666,14 +1702,9 @@ function readPad2() {
   const raw = pad.axes[0] ?? 0
   const stick = Math.abs(raw) <= 1 ? raw : 0
   const analog = Math.sign(stick) * Math.max(0, (Math.abs(stick) - stickDeadzone) / (1 - stickDeadzone))
-  const input = {
-    direction: left || right ? Number(right) - Number(left) : analog,
-    jump: jumpHeld && !pad2JumpHeld,
-    fire: fireHeld,
-    crouch: pressed(padButtons.down) || (pad.axes[1] > .64 && pad.axes[1] <= 1 && Math.abs(stick) < .5),
-    restart: startHeld && !pad2StartHeld
-  }
-  pad2JumpHeld = jumpHeld
+  const mixed = customizePad(1, pad, { direction: left || right ? Number(right) - Number(left) : analog, jumpHeld, fireHeld, crouch: pressed(padButtons.down) || (pad.axes[1] > .64 && pad.axes[1] <= 1 && Math.abs(stick) < .5) })
+  const input = { direction: mixed.direction, jump: mixed.jumpHeld && !pad2JumpHeld, fire: mixed.fireHeld, crouch: mixed.crouch, restart: startHeld && !pad2StartHeld }
+  pad2JumpHeld = mixed.jumpHeld
   pad2StartHeld = startHeld
   return input
 }
@@ -1696,10 +1727,10 @@ function updatePaused(dt) {
     previewTime = (previewTime + dt * fps) % sequences[previewSequence].count
     previewFrame = Math.floor(previewTime)
   }
+  if (mode === 'options') { options.tick(dt); return }   // a tela OPÇÕES lê os controles por conta própria
   const pad = readPad(dt)
   if (mode === 'select' || mode === 'players') { selectPadInput(pad); return }
-  if (mode === 'menu') { if (menuPadInput(pad)) return }   // no menu de pausa o controle anda pelos botões
-  else if (pad.jump && mode === 'title') { startGame(); return }
+  if (mode === 'menu' || mode === 'title') { if (menuPadInput(pad)) return }   // no menu de pausa e na tela inicial o controle anda pelos botões
   if (!pad.restart) return
   if (mode === 'title') startGame()
   else resumeGame()
@@ -2077,6 +2108,7 @@ let menuSel = 0, menuKey = null, menuPadDir = 0
 function menuItems() {
   if (!gameOverScreen.hidden) return [...gameOverScreen.querySelectorAll('button')].filter((b) => !b.hidden)
   if (mode === 'menu') return [...document.querySelectorAll('#menu .menu-actions button')].filter((b) => !b.hidden && b.offsetParent !== null)
+  if (mode === 'title') return [select('#start'), select('#options-btn')].filter((b) => b && !b.hidden)   // INICIAR JOGO e OPÇÕES
   return []
 }
 function moveMenu(step) {
@@ -2092,7 +2124,7 @@ function confirmMenu() {
 }
 function updateMenuCursor() {
   const items = menuItems()
-  const key = items.length ? (gameOverScreen.hidden ? 'menu' : 'gameover') : null
+  const key = items.length ? (!gameOverScreen.hidden ? 'gameover' : mode === 'title' ? 'title' : 'menu') : null
   if (key !== menuKey) { menuKey = key; menuSel = 0; if (items[0]) items[0].focus({ preventScroll: true }) }   // abre sempre no primeiro botão
   menuCursor.hidden = !key || (key === 'gameover' && !gameOverScreen.classList.contains('ready'))   // no fim de jogo só depois que os botões surgem
   if (!items.length) return
@@ -2103,11 +2135,11 @@ function updateMenuCursor() {
   const host = key === 'gameover' ? gameOverScreen : document.querySelector('.screen')
   if (menuCursor.parentElement !== host) host.insertBefore(menuCursor, host.firstChild)
   const pauseArt = document.querySelector('#menu').classList.contains('player-mode') && { resume: 'botao-continuar', 'exit-menu': 'botao-sair' }[items[menuSel].id]   // MODO JOGADOR: CONTINUAR e SAIR em arte (520×140)
-  const art = pauseArt || ['iniciar', 'continuar', 'reiniciar'].find((n) => items[menuSel].classList.contains('art-' + n))
+  const art = pauseArt || ['iniciar', 'continuar', 'reiniciar', 'opcoes'].find((n) => items[menuSel].classList.contains('art-' + n))
   menuCursor.classList.toggle('shape', !!art)
   if (art) {
     // botões com arte: o contorno acompanha o formato do sprite (assets/botoes/*-contorno.png: a silhueta do botão dilatada, 16 px de folga em volta)
-    const [aw, ah] = pauseArt ? [520, 140] : [410, 174]
+    const [aw, ah] = pauseArt ? [520, 140] : art === 'opcoes' ? [520, 156] : [410, 174]
     const kx = r.width / aw, ky = r.height / ah
     menuCursor.style.backgroundImage = `url(assets/botoes/${art}-contorno.png?v=3)`
     menuCursor.style.left = Math.round(r.left - s.left - 16 * kx) + 'px'
@@ -2124,7 +2156,7 @@ function updateMenuCursor() {
   }
 }
 // o mouse também move a seleção
-for (const overlay of [gameOverScreen, document.querySelector('#menu')]) {
+for (const overlay of [gameOverScreen, document.querySelector('#menu'), titleScreen]) {
   overlay.addEventListener('mouseover', (event) => {
     const i = menuItems().indexOf(event.target.closest('button'))
     if (i >= 0) menuSel = i
@@ -2139,7 +2171,7 @@ window.addEventListener('keydown', (event) => {
   else if (['Enter', 'NumpadEnter', 'Space'].includes(event.code)) confirmMenu()
   else return
   event.preventDefault()
-  event.stopPropagation()
+  event.stopImmediatePropagation()
 }, true)
 // controle: chamada a cada quadro enquanto há uma tela de botões
 function menuPadInput(pad) {
@@ -3926,7 +3958,7 @@ Promise.all([
   // arte das telas e dos botões: <img> do index.html, imagens do style.css, contornos do seletor e retratos do HUD do Operador
   trackLoad(waitImages(document)),
   ...cssImageUrls().map(preloadUrl),
-  ...['iniciar', 'continuar', 'reiniciar', 'botao-continuar', 'botao-sair'].map((n) => preloadUrl('assets/botoes/' + n + '-contorno.png?v=3')),
+  ...['iniciar', 'continuar', 'reiniciar', 'botao-continuar', 'botao-sair', 'opcoes'].map((n) => preloadUrl('assets/botoes/' + n + '-contorno.png?v=3')),
   ...[...new Set(Object.values(portraitSources))].map((n) => preloadUrl('assets/selecionar/' + n + '.png?v=2')),
   trackLoad(document.fonts ? document.fonts.ready : Promise.resolve())
 ]).then(() => {
@@ -3978,7 +4010,7 @@ Promise.all([
       get lives() { return players[0].lives }, set lives(v) { for (const p of players) p.lives = v },
       get weather() { return weather }, set weather(v) { weather = v },
       get rain() { return rainAmount },
-      meleeNav, mapFrame, spriteHidden, get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
+      controlSets, controlConfig, meleeNav, mapFrame, spriteHidden, get fx() { return gameFx }, get roadSpeed() { return roadSpeed }, get camera2() { return camera },
       get storm() { return storm }, get waveIndex() { return waveState.index },
       setWave(i) { waveState.index = i; rainAmount = rainByWave[Math.min(i, rainByWave.length - 1)]; weather = weatherByWave[Math.min(i, weatherByWave.length - 1)] },
       get god() { return players[0].inv > 1e5 }, set god(v) { for (const p of players) p.inv = v ? 1e9 : 0 },
